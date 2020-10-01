@@ -3,6 +3,10 @@ This module includes a few utility functions.
 """
 
 import torch
+import torch.distributions as dist
+from bayes_perm_hmm.sampleable import SampleableDiscreteHMM
+from bayes_perm_hmm.min_entropy_hmm import PermutedDiscreteHMM
+import copy
 
 
 ZERO = 10**(-14)
@@ -130,6 +134,31 @@ def transpositions(n):
             x[j] = i
             ts.append(x)
     return ts
+
+
+def transpositions_and_identity(n):
+    return torch.stack([torch.arange(n)] + transpositions(n))
+
+
+def random_hmm(n):
+    dirichlet = dist.Dirichlet(torch.ones(n) / n)
+    initial_logits = (torch.ones(n) / n).log()
+    transition_logits = dirichlet.sample((n,))
+    observation_dist = dist.Bernoulli(torch.rand(n))
+    return SampleableDiscreteHMM(initial_logits, transition_logits, observation_dist)
+
+
+def add_permutations(hmm, permutations):
+    il = hmm.initial_logits.clone()
+    tl = hmm.transition_logits.clone()
+    od = copy.deepcopy(hmm.observation_dist)
+    pdh = PermutedDiscreteHMM(il, tl, od, permutations)
+    return(pdh)
+
+
+def random_phmm(n):
+    hmm = random_hmm(n)
+    return add_permutations(hmm, transpositions_and_identity(n))
 
 
 def first_nonzero(x, dim=-1):
