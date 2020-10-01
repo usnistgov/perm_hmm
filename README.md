@@ -1,3 +1,5 @@
+# State inference via permutations in Hidden Markov Models
+
 # Abstract
 
 Computes misclassification rates for various repeated measurement schemes,
@@ -42,3 +44,12 @@ browser.
 # Paper
 
 See arXiv:xxxx.xxxxx for further details.
+
+# Description
+
+
+Given a set of measurements and a single copy of a state, what is the optimal measurement strategy to minimize
+one-shot misclassification error? For perfect measurements, clearly we cannot extract information after the first
+observation. However, for imperfect measurements, there is an effective transition model for the post-measurement state.
+We can model this as a path through discrete state space, where each measurement induces a jump between the pure states
+with some probability. The new probability of measuring a state is given by the 

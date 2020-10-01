@@ -90,7 +90,7 @@ class BayesInitialDistribution(BayesDistribution):
         post_init = (observation_logits + prior_s_cond_init).logsumexp(axis=-1)
         post_init = post_init + self.logits.unsqueeze(-2)
         post_init = post_init - post_init.logsumexp(-1, keepdims=True)
-        return post_init.squeeze()
+        return post_init
 
 
 class BayesCurrentDistribution(BayesDistribution):

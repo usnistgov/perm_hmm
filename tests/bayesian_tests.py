@@ -138,6 +138,16 @@ class BdhmmTestCase(unittest.TestCase):
         self.assertTrue(entropies[2].eq(torch.tensor([entropy.min()], dtype=torch.float)).all())
         self.assertTrue(dists[2].eq(self.bdhmm.prior_log_inits.logits).all())
 
+    def test_single_perm(self):
+        n_states = 4
+        dirichlet = dist.Dirichlet(torch.ones(n_states) / n_states)
+        initial_logits = (torch.ones(n_states) / n_states).log()
+        transition_logits = dirichlet.sample((n_states,))
+        observation_dist = dist.Bernoulli(torch.rand(n_states))
+        possible_perms = torch.arange(n_states)[None, :]
+        pdh = PermutedDiscreteHMM(initial_logits, transition_logits, observation_dist, possible_perms)
+
+        self.assertTrue(pdh.expected_entropy().shape == (1,))
 
 if __name__ == '__main__':
     unittest.main()
