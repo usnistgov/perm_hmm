@@ -203,3 +203,13 @@ class SampleableDiscreteHMM(DiscreteHMM):
         result = self.initial_logits + result.logsumexp(-1)
         result = result.logsumexp(-1)
         return result
+
+
+def random_hmm(n):
+    dirichlet = dist.Dirichlet(torch.ones(n) / n)
+    initial_logits = (torch.ones(n) / n).log()
+    transition_logits = dirichlet.sample((n,))
+    observation_dist = dist.Bernoulli(torch.rand(n))
+    return SampleableDiscreteHMM(initial_logits, transition_logits, observation_dist)
+
+

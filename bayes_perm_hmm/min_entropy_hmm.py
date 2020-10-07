@@ -16,10 +16,11 @@ import pyro.distributions as dist
 from pyro.distributions import DiscreteHMM
 from pyro.distributions.hmm import _logmatmulexp
 from pyro.distributions.util import broadcast_shape
-from bayes_perm_hmm.sampleable import SampleableDiscreteHMM
+from bayes_perm_hmm.sampleable import SampleableDiscreteHMM, random_hmm
 from bayes_perm_hmm.return_types import HMMOutput, PostYPostS0, GenDistEntropy, \
     MinEntHistory, PermWithHistory, MinEntHMMOutput
-from bayes_perm_hmm.util import ZERO, wrap_index
+from bayes_perm_hmm.util import ZERO, wrap_index, transpositions_and_identity
+import copy
 
 
 class BayesDistribution(object):
@@ -788,3 +789,17 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
         return SampleableDiscreteHMM(self.initial_logits,
                                      t_logits,
                                      self.observation_dist).log_prob(data)
+
+
+def add_permutations(hmm, permutations):
+    il = hmm.initial_logits.clone()
+    tl = hmm.transition_logits.clone()
+    od = copy.deepcopy(hmm.observation_dist)
+    pdh = PermutedDiscreteHMM(il, tl, od, permutations)
+    return(pdh)
+
+
+def random_phmm(n):
+    hmm = random_hmm(n)
+    return add_permutations(hmm, transpositions_and_identity(n))
+
