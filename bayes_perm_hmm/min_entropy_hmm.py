@@ -18,7 +18,7 @@ from pyro.distributions.hmm import _logmatmulexp
 from pyro.distributions.util import broadcast_shape
 from bayes_perm_hmm.sampleable import SampleableDiscreteHMM, random_hmm
 from bayes_perm_hmm.return_types import HMMOutput, PostYPostS0, GenDistEntropy, \
-    MinEntHistory, PermWithHistory, MinEntHMMOutput
+    MinEntHistory, PermWithHistory, MinEntHMMOutput, PermHMMOutput
 from bayes_perm_hmm.util import ZERO, wrap_index, transpositions_and_identity
 import copy
 
@@ -588,7 +588,7 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
         self.reset()
         return dist_array
 
-    def sample_min_entropy(self, sample_shape=()):
+    def sample_min_entropy(self, sample_shape=(), save_history=True):
         r"""
         This method allows us to sample from the HMM with the minimum expected
         posterior entropy heuristic.
@@ -681,8 +681,9 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
             identity_perm.expand((total_batches,) + (self.state_dim,))
 
         perm_index = torch.zeros(flat_shape, dtype=int)
-        dist_array = torch.zeros(flat_shape + (self.state_dim,))
-        entropy_array = torch.zeros(flat_shape)
+        if save_history:
+            dist_array = torch.zeros(flat_shape + (self.state_dim,))
+            entropy_array = torch.zeros(flat_shape)
         states = torch.empty(flat_shape, dtype=int)
         observations = \
             torch.empty(
@@ -705,10 +706,11 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
                 identity_perm,
             )
             for t in pyro.markov(range(1, flat_shape[-1])):
-                dist_array[batch, t - 1] = self.prior_log_inits.logits
                 entropy = self.expected_entropy().expand(total_batches, n_perms)
-                entropy_array[batch, t-1], perm_index[batch, t-1] = \
-                    entropy.min(dim=-1)
+                if save_history:
+                    dist_array[batch, t - 1] = self.prior_log_inits.logits
+                    entropy_array[batch, t-1], perm_index[batch, t-1] = \
+                        entropy.min(dim=-1)
                 perm = self.possible_perms[perm_index[batch, t-1]]
                 states[batch, t] = pyro.sample(
                     "x_{}_{}".format(batch, t),
@@ -728,32 +730,41 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
                     observations[batch, t],
                     self.possible_perms[perm_index[batch, t-1]]
                 )
-            dist_array[batch, -1] = self.prior_log_inits.logits
             entropy = self.expected_entropy().expand(total_batches, n_perms)
-            entropy_array[batch, -1], perm_index[batch, -1] = \
-                entropy.min(dim=-1)
+            if save_history:
+                dist_array[batch, -1] = self.prior_log_inits.logits
+                entropy_array[batch, -1], perm_index[batch, -1] = \
+                    entropy.min(dim=-1)
         self.reset()
         states = states.reshape(shape)
         observations = observations.reshape(shape + self.observation_dist.event_shape)
         perm_index = perm_index.reshape(shape)
-        dist_array = dist_array.reshape(shape + (self.state_dim,))
-        entropy_array = entropy_array.reshape(shape)
+        if save_history:
+            dist_array = dist_array.reshape(shape + (self.state_dim,))
+            entropy_array = entropy_array.reshape(shape)
         if (self.event_shape[0] == 1) and (sample_shape == ()):
             states.squeeze_(0)
             observations.squeeze_(0)
             perm_index.squeeze_(0)
-            dist_array.squeeze_(0)
-            entropy_array.squeeze_(0)
-        return MinEntHMMOutput(
-            HMMOutput(states, observations),
-            PermWithHistory(
-                self.possible_perms[perm_index],
-                MinEntHistory(
-                    dist_array,
-                    entropy_array,
+            if save_history:
+                dist_array.squeeze_(0)
+                entropy_array.squeeze_(0)
+        if save_history:
+            return MinEntHMMOutput(
+                HMMOutput(states, observations),
+                PermWithHistory(
+                    self.possible_perms[perm_index],
+                    MinEntHistory(
+                        dist_array,
+                        entropy_array,
+                    ),
                 ),
-            ),
-        )
+            )
+        else:
+            return PermHMMOutput(
+                HMMOutput(states, observations),
+                self.possible_perms[perm_index]
+            )
 
     def log_prob_with_perm(self, perm: torch.Tensor, data):
         """
@@ -791,15 +802,7 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
                                      self.observation_dist).log_prob(data)
 
 
-def add_permutations(hmm, permutations):
-    il = hmm.initial_logits.clone()
-    tl = hmm.transition_logits.clone()
-    od = copy.deepcopy(hmm.observation_dist)
-    pdh = PermutedDiscreteHMM(il, tl, od, permutations)
-    return(pdh)
-
-
 def random_phmm(n):
     hmm = random_hmm(n)
-    return add_permutations(hmm, transpositions_and_identity(n))
+    return PermutedDiscreteHMM.from_hmm(hmm, transpositions_and_identity(n))
 

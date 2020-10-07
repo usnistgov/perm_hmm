@@ -3,8 +3,6 @@ This module includes a few utility functions.
 """
 
 import torch
-import torch.distributions as dist
-import copy
 
 
 ZERO = 10**(-14)

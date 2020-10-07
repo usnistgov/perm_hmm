@@ -207,6 +207,26 @@ class MinEntHMMOutput(NamedTuple):
     """
 
 
+class PermHMMOutput(NamedTuple):
+    """
+    The output type of :meth:`PermutedDiscreteHMM.sample_min_entropy`.
+    Contains the observations, the states, the optimal permutations, the partial
+    posterior log initial state distributions, and the optimal expected
+    posterior entropies.
+
+    .. seealso:: classes :py:class:`bayes_perm_hmm.sampleable.HMMOutput`,
+        :py:class:`PermIndexWithHistory`
+    """
+    sample: HMMOutput
+    """:py:class:`HMMOutput`
+    The states and observations.
+    """
+    perm: torch.Tensor
+    """:py:class:`PermWithHistory`
+    The permutations and the computation used to produce them.
+    """
+
+
 class InterruptedParameters(NamedTuple):
     bright_param: torch.Tensor
     dark_param: torch.Tensor
