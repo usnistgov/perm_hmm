@@ -3,6 +3,7 @@ This module includes a few utility functions.
 """
 
 import torch
+import numpy as np
 
 
 ZERO = 10**(-14)
@@ -39,7 +40,7 @@ def entropy(log_dist):
     return (log_dist.exp() * (-log_dist)).sum(-1)
 
 
-def num_to_data(num, num_bins):
+def num_to_data(num, num_bins, base=2):
     """
     Turns an integer into a tensor containing its binary representation.
 
@@ -51,9 +52,9 @@ def num_to_data(num, num_bins):
 
     :returns: A :py:class:`torch.Tensor` of length ``num_bins``
     """
+    x = np.base_repr(num, base)
     return torch.tensor(
-        list(map(int, ("{{0:0{}b}}".format(num_bins)).format(num))),
-        dtype=torch.float,
+        list(map(int, '0'*(num_bins - len(x)) + x))
     )
 
 

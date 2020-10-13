@@ -45,6 +45,10 @@ class SampleableDiscreteHMM(DiscreteHMM):
                              "object.")
         super().__init__(initial_logits, transition_logits, observation_dist,
                          validate_args=validate_args)
+        self.has_enumerate_support = self.observation_dist.has_enumerate_support
+
+    def enumerate_support(self, expand=True):
+        return self.observation_dist.enumerate_support(expand)
 
     def posterior_log_initial_state_dist(self, value):
         """
