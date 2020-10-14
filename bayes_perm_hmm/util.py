@@ -132,7 +132,7 @@ def transpositions(n):
     return ts
 
 
-def transpositions_and_identity(n):
+def id_and_transpositions(n):
     return torch.stack([torch.arange(n)] + transpositions(n))
 
 

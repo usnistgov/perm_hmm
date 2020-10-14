@@ -206,6 +206,17 @@ class SampleableDiscreteHMM(DiscreteHMM):
 
 
 def random_hmm(n):
+    """
+    A utility for generating random HMMs.
+
+    Creates a uniformly random HMM with Bernoulli output. This means that each
+    row of the transition matrix is sampled from the Dirichlet distribution of
+    equal concentrations, as well as the initial state distribution, while the
+    output distributions have their "bright" probability drawn uniformly from
+    the unit interval.
+    :param int n: Number of states for the HMM
+    :return: A SampleableDiscreteHMM with Bernoulli outputs.
+    """
     dirichlet = dist.Dirichlet(torch.ones(n) / n)
     initial_logits = (torch.ones(n) / n).log()
     transition_logits = dirichlet.sample((n,))

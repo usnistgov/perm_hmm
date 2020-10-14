@@ -711,6 +711,8 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
                     dist_array[batch, t - 1] = self.prior_log_inits.logits
                     entropy_array[batch, t-1], perm_index[batch, t-1] = \
                         entropy.min(dim=-1)
+                else:
+                    perm_index[batch, t-1] = entropy.argmin(dim=-1)
                 perm = self.possible_perms[perm_index[batch, t-1]]
                 states[batch, t] = pyro.sample(
                     "x_{}_{}".format(batch, t),
@@ -735,6 +737,8 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
                 dist_array[batch, -1] = self.prior_log_inits.logits
                 entropy_array[batch, -1], perm_index[batch, -1] = \
                     entropy.min(dim=-1)
+            else:
+                perm_index[batch, -1] = entropy.argmin(dim=-1)
         self.reset()
         states = states.reshape(shape)
         observations = observations.reshape(shape + self.observation_dist.event_shape)
@@ -752,12 +756,10 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
         if save_history:
             return MinEntHMMOutput(
                 HMMOutput(states, observations),
-                PermWithHistory(
-                    self.possible_perms[perm_index],
-                    MinEntHistory(
-                        dist_array,
-                        entropy_array,
-                    ),
+                self.possible_perms[perm_index],
+                MinEntHistory(
+                    dist_array,
+                    entropy_array,
                 ),
             )
         else:
@@ -800,6 +802,29 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
         return SampleableDiscreteHMM(self.initial_logits,
                                      t_logits,
                                      self.observation_dist).log_prob(data)
+
+    def posterior_log_initial_state_dist(self, data, perm=None):
+        """
+        The posterior log initial state distributions for the data, given the
+        permutations applied.
+        :param torch.Tensor data: Data to compute the posterior initial state
+        distribution for
+        :param torch.Tensor perm: Permutations which were applied.
+        :return:
+        """
+        if perm is None:
+            return super().posterior_log_initial_state_dist(data)
+        else:
+            batch_shape = perm.shape[:-1]
+            if data.shape[:len(data.shape)-self.observation_dist.event_dim] != batch_shape:
+                raise ValueError("Perms and data do not have the same batch shape.")
+            t_logits = self.transition_logits.expand(
+                batch_shape + self.transition_logits.shape[-2:]
+            )
+            t_logits = t_logits[wrap_index(perm, batch_shape=perm.shape[:-1])]
+            return SampleableDiscreteHMM(self.initial_logits,
+                                         t_logits,
+                                         self.observation_dist).posterior_log_initial_state_dist(data)
 
 
 def random_phmm(n):
