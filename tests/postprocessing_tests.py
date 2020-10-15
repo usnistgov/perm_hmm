@@ -68,7 +68,7 @@ class MyTestCase(unittest.TestCase):
         )
         train_x, train_y = self.shmm.sample((num_samples, max_t))
         ground_truth = train_x[..., 0]
-        while ((ground_truth.unsqueeze(-1) == self.testing_states).sum(-2) == 0).any():
+        while ((ground_truth.unsqueeze(-1) == testing_states).sum(-2) == 0).any():
             train_x, train_y = self.shmm.sample((num_samples, max_t))
             ground_truth = train_x[..., 0]
         _ = train(ic, train_y, train_x[..., 0], self.shmm.initial_logits.shape[-1])
@@ -99,7 +99,7 @@ class MyTestCase(unittest.TestCase):
         print(mr)
         self.assertTrue(mr.confusions.sum(-1)[self.testing_states].allclose(torch.tensor(1.)))
         bp = pp.PostDistExactPostprocessor(
-            self.bdhmm.log_prob_with_perm(bayes_results.optimal_perm, all_data),
+            self.bdhmm.log_prob_with_perm(all_data, bayes_results.optimal_perm),
             bayes_results.history.partial_post_log_init_dists[..., -1, :],
             self.initial_logits,
             self.testing_states,
@@ -125,8 +125,8 @@ class MyTestCase(unittest.TestCase):
         testing_states = torch.tensor([0, 1])
         hmm = meh.random_phmm(n)
         x = hmm.sample_min_entropy((100,), save_history=False)
-        plisd = hmm.posterior_log_initial_state_dist(x.sample.observations, x.perm)
-        ep = pp.PostDistEmpiricalPostprocessor(x.sample.states, testing_states, n, plisd)
+        plisd = hmm.posterior_log_initial_state_dist(x.observations, x.perm)
+        ep = pp.PostDistEmpiricalPostprocessor(x.states, testing_states, n, plisd)
         ep.misclassification_rates()
 
 

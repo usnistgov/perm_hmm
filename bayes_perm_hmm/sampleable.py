@@ -73,6 +73,7 @@ class SampleableDiscreteHMM(DiscreteHMM):
             return result
 
         value = value.unsqueeze(-1 - self.observation_dist.event_dim)
+        value = value.float()
         observation_logits = self.observation_dist.log_prob(value)
         head = observation_logits[..., 0, :]
         tail = observation_logits[..., 1:, :]
@@ -83,8 +84,8 @@ class SampleableDiscreteHMM(DiscreteHMM):
             result = result.logsumexp(-1)
             result = self.initial_logits + head + result
             result = result - result.logsumexp(-1, keepdim=True)
-        elif len(self.transition_logits.shape) == 3:
-            result = self.transition_logits[:-1, :, :] + tail
+        elif len(self.transition_logits.shape) >= 3:
+            result = self.transition_logits[..., :-1, :, :] + tail
             result = _sequential_logmatmulexp(result)
             result = result.logsumexp(-1)
             result = self.initial_logits + head + result
@@ -200,7 +201,7 @@ class SampleableDiscreteHMM(DiscreteHMM):
 
             shape ``batch_shape``
         """
-        value = value.unsqueeze(-1 - self.observation_dist.event_dim)
+        value = value.unsqueeze(-1 - self.observation_dist.event_dim).float()
         observation_logits = self.observation_dist.log_prob(value)
         result = self.transition_logits + observation_logits.unsqueeze(-1)
         result = _sequential_logmatmulexp(result)

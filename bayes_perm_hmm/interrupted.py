@@ -48,6 +48,7 @@ class InterruptedClassifier(object):
             data = data.expand(1, 1)
         elif len(shape) == 1:
             data = data.expand(1, -1)
+        data = data.float()
         intermediate_lps = self.dist.log_prob(data.unsqueeze(-1))[..., self.testing_states].cumsum(dim=-2).float()
         sort_lps, sort_inds = torch.sort(intermediate_lps, -1)
         sort_lrs = sort_lps[..., -1] - sort_lps[..., -2]

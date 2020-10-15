@@ -128,7 +128,7 @@ class MyTestCase(unittest.TestCase):
         all_states = torch.stack(
             [torch.tensor(to_base(x, st, tm)) for x in range(st ** tm)])
         all_runs = torch.stack(
-            [torch.tensor(num_to_data(x, tm)) for x in range(2 ** tm)])
+            [torch.tensor(num_to_data(x, tm)) for x in range(2 ** tm)]).float()
 
         s, r = torch.broadcast_tensors(all_states.unsqueeze(-2),
                                        all_runs.unsqueeze(-3))

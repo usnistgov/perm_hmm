@@ -5,7 +5,7 @@ import argparse
 import torch
 import pyro.distributions as dist
 from bayes_perm_hmm.min_entropy_hmm import PermutedDiscreteHMM
-from bayes_perm_hmm.bernoulli_simulator import BernoulliSimulator
+from bayes_perm_hmm.simulator import Simulator
 from bayes_perm_hmm.physical_systems import beryllium
 
 
@@ -24,7 +24,7 @@ def main(args):
                                    torch.from_numpy(
                                        beryllium.allowable_permutations()))
     num_bins = args.num_bins
-    b_sim = BernoulliSimulator(
+    b_sim = Simulator(
         perm_hmm,
         torch.tensor([beryllium.BRIGHT_STATE, beryllium.DARK_STATE]),
         num_bins,

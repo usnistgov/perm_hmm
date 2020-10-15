@@ -452,7 +452,7 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
             return GenDistEntropy(PostYPostS0(plyd, plid), entropy)
         return entropy
 
-    def get_perms(self, data):
+    def get_perms(self, data, save_history=True):
         r"""
         Given a run of data, returns the posterior initial state distributions,
         the optimal permutations according to
@@ -498,8 +498,10 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
                     batch_shape + (-1, -1, -1)
                 )
         perm_index_array = torch.zeros(data_shape, dtype=int)
-        dist_array = torch.zeros(data_shape + (self.state_dim,))
-        entropy_array = torch.zeros_like(data)
+        data = data.float()
+        if save_history:
+            dist_array = torch.zeros(data_shape + (self.state_dim,))
+            entropy_array = torch.zeros_like(data)
         identity_perm = torch.arange(self.state_dim, dtype=int)
         identity_perm = identity_perm.expand(batch_shape + (self.state_dim,))
         self.update_prior(
@@ -507,26 +509,31 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
             identity_perm,
         )
         for i in range(1, max_t):
-            dist_array[..., i - 1, :] = self.prior_log_inits.logits
             entropy = self.expected_entropy()
-            entropy_array[..., i-1], perm_index_array[..., i-1] = \
-                entropy.min(dim=-1)
+            min_ent, perm_index_array[..., i-1] = entropy.min(dim=-1)
+            if save_history:
+                dist_array[..., i - 1, :] = self.prior_log_inits.logits
+                entropy_array[..., i-1] = min_ent
             self.update_prior(
                 data[(..., i) + (slice(None),)*self.observation_dist.event_dim],
-                self.possible_perms[perm_index_array[..., i - 1]],
+                self.possible_perms[perm_index_array[..., i-1]],
             )
-        dist_array[..., -1, :] = self.prior_log_inits.logits
         entropy = self.expected_entropy()
-        entropy_array[..., -1], perm_index_array[..., -1] = \
-            entropy.min(dim=-1)
+        min_ent, perm_index_array[..., -1] = entropy.min(dim=-1)
+        if save_history:
+            dist_array[..., -1, :] = self.prior_log_inits.logits
+            entropy_array[..., -1] = min_ent
         self.reset()
-        return PermWithHistory(
-            self.possible_perms[perm_index_array],
-            MinEntHistory(
-                dist_array,
-                entropy_array,
-            ),
-        )
+        if save_history:
+            return PermWithHistory(
+                self.possible_perms[perm_index_array],
+                MinEntHistory(
+                    dist_array,
+                    entropy_array,
+                ),
+            )
+        else:
+            return self.possible_perms[perm_index_array]
 
     def reset(self):
         """
@@ -755,7 +762,8 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
                 entropy_array.squeeze_(0)
         if save_history:
             return MinEntHMMOutput(
-                HMMOutput(states, observations),
+                states,
+                observations,
                 self.possible_perms[perm_index],
                 MinEntHistory(
                     dist_array,
@@ -764,11 +772,12 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
             )
         else:
             return PermHMMOutput(
-                HMMOutput(states, observations),
-                self.possible_perms[perm_index]
+                states,
+                observations,
+                self.possible_perms[perm_index],
             )
 
-    def log_prob_with_perm(self, perm: torch.Tensor, data):
+    def log_prob_with_perm(self, data, perm: torch.Tensor):
         """
         Computes the log prob of a run, using the permutation sequence
         that was applied to generate the data.

@@ -52,22 +52,48 @@ class AllRates(NamedTuple):
     """
 
 
-class HMMOutput(NamedTuple):
-    """
-    The output of an HMM.
-    """
-    states: torch.Tensor
-    """:py:class:`torch.Tensor`, dtype :py:class:`int`.
-    The states realized during the course of the observation.
+class MinEntHistory(NamedTuple):
+    r"""
+    Contains the posterior log initial state distributions
+    and the minimal expected posterior entropies,
+    the quantities which are optimized over permutations to select the optimal
+    permutations.
 
-        shape ``(batch_shape, time_dim)``
+    .. seealso:: class :py:class:`PermWithHistory`
     """
-    observations: torch.Tensor
-    """:py:class:`torch.Tensor`, dtype :py:class:`torch.float`.
-    The output observations.
+    partial_post_log_init_dists: torch.Tensor
+    r""":py:class:`torch.Tensor`, float.
+    The posterior log initial
+    state distributions recorded for each time step, :math:`p(s_0 | y^{i-1})`
 
-        shape ``(batch_shape, time_dim, sample_shape)``
+        shape ``(time_dim, state_dim)``
     """
+    expected_entropy: torch.Tensor
+    r""":py:class:`torch.Tensor`, float.
+    The minimal expected entropy.
+
+        .. math::
+            \operatorname{min}_{\sigma}H_\sigma(S_0|Y^i, y^{i-1})
+
+        shape ``(time_dim,)``
+    """
+
+hmm_fields = [
+    ('states', torch.Tensor),
+    ('observations', torch.Tensor),
+]
+
+HMMOutput = NamedTuple('HMMOutput', hmm_fields)
+perm_hmm_fields = hmm_fields + [('perm', torch.Tensor)]
+PermHMMOutput = NamedTuple(
+    'PermHMMOutput',
+    perm_hmm_fields,
+)
+MinEntHMMOutput = NamedTuple(
+    'MinEntHMMOutput',
+    perm_hmm_fields + [('history', MinEntHistory)]
+)
+
 
 
 class LogProbAndPostDist(NamedTuple):
@@ -141,33 +167,6 @@ class GenDistEntropy(NamedTuple):
     """
 
 
-class MinEntHistory(NamedTuple):
-    r"""
-    Contains the posterior log initial state distributions
-    and the minimal expected posterior entropies,
-    the quantities which are optimized over permutations to select the optimal
-    permutations.
-
-    .. seealso:: class :py:class:`PermWithHistory`
-    """
-    partial_post_log_init_dists: torch.Tensor
-    r""":py:class:`torch.Tensor`, float.
-    The posterior log initial
-    state distributions recorded for each time step, :math:`p(s_0 | y^{i-1})`
-
-        shape ``(time_dim, state_dim)``
-    """
-    expected_entropy: torch.Tensor
-    r""":py:class:`torch.Tensor`, float.
-    The minimal expected entropy.
-
-        .. math::
-            \operatorname{min}_{\sigma}H_\sigma(S_0|Y^i, y^{i-1})
-
-        shape ``(time_dim,)``
-    """
-
-
 class PermWithHistory(NamedTuple):
     """
     Another representation of the data returned by
@@ -185,47 +184,6 @@ class PermWithHistory(NamedTuple):
     contains the history of the computation used to
     compute the optimal permutations.
     """
-
-
-class MinEntHMMOutput(NamedTuple):
-    """
-    The output type of :meth:`PermutedDiscreteHMM.sample_min_entropy`.
-    Contains the observations, the states, the optimal permutations, the partial
-    posterior log initial state distributions, and the optimal expected
-    posterior entropies.
-
-    .. seealso:: classes :py:class:`bayes_perm_hmm.sampleable.HMMOutput`,
-        :py:class:`PermIndexWithHistory`
-    """
-    sample: HMMOutput
-    """:py:class:`HMMOutput`
-    The states and observations.
-    """
-    bayesian: PermWithHistory
-    """:py:class:`PermWithHistory`
-    The permutations and the computation used to produce them.
-    """
-
-
-class PermHMMOutput(NamedTuple):
-    """
-    The output type of :meth:`PermutedDiscreteHMM.sample_min_entropy`.
-    Contains the observations, the states, the optimal permutations, the partial
-    posterior log initial state distributions, and the optimal expected
-    posterior entropies.
-
-    .. seealso:: classes :py:class:`bayes_perm_hmm.sampleable.HMMOutput`,
-        :py:class:`PermIndexWithHistory`
-    """
-    sample: HMMOutput
-    """:py:class:`HMMOutput`
-    The states and observations.
-    """
-    perm: torch.Tensor
-    """:py:class:`PermWithHistory`
-    The permutations and the computation used to produce them.
-    """
-
 
 class InterruptedParameters(NamedTuple):
     bright_param: torch.Tensor

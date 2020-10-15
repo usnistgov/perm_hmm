@@ -26,7 +26,7 @@ class MyTestCase(unittest.TestCase):
                                          self.possible_perms)
 
     def test_sample_minent(self):
-        (x, y), (perm_array, (dist_array, entropy_array)) = \
+        x, y, perm_array, (dist_array, entropy_array) = \
             self.bdhmm.sample_min_entropy((10, 7))
         self.assertTrue(x.shape == (10, 7))
         self.assertTrue(y.shape == (10, 7))
@@ -40,13 +40,13 @@ class MyTestCase(unittest.TestCase):
         self.assertTrue(torch.all(b_perm_array == perm_array))
         self.assertTrue(b_entropy_array.allclose(entropy_array, atol=1e-7))
 
-        (x, y), (perm_array, (dist_array, entropy_array)) = \
+        x, y, perm_array, (dist_array, entropy_array) = \
             self.bdhmm.sample_min_entropy()
         self.assertTrue(y.shape == ())
-        (x, y), (perm_array, (dist_array, entropy_array)) = \
+        x, y, perm_array, (dist_array, entropy_array) = \
             self.bdhmm.sample_min_entropy((1,))
         self.assertTrue(y.shape == (1,))
-        (x, y), (perm_array, (dist_array, entropy_array)) = \
+        x, y, perm_array, (dist_array, entropy_array) = \
             self.bdhmm.sample_min_entropy((10, 1))
         self.assertTrue(y.shape == (10, 1))
 

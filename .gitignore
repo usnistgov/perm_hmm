@@ -1,5 +1,4 @@
 .idea/
-example_scripts/perm_hmm_data/
 scratch/
 /hmmsvenv
 
@@ -33,7 +32,8 @@ docs/_build/
 
 
 # Jupyter Notebook
-.ipynb_checkpoints
+**/.ipynb_checkpoints
+**/data
 
 # Environments
 .env

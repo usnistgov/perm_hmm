@@ -6,7 +6,7 @@ import pyro
 from bayes_perm_hmm.min_entropy_hmm import PermutedDiscreteHMM
 from bayes_perm_hmm.interrupted import InterruptedClassifier
 from bayes_perm_hmm.sampleable import SampleableDiscreteHMM
-from bayes_perm_hmm.bernoulli_simulator import BernoulliSimulator
+from bayes_perm_hmm.simulator import Simulator
 from bayes_perm_hmm.postprocessing import InterruptedEmpiricalPostprocessor, InterruptedExactPostprocessor
 import bayes_perm_hmm.training
 from bayes_perm_hmm.util import ZERO, transpositions, num_to_data
@@ -40,7 +40,7 @@ class MyTestCase(unittest.TestCase):
         )
         self.bhmm = PermutedDiscreteHMM.from_hmm(self.hmm, self.possible_perms)
         self.ic = InterruptedClassifier(self.observation_dist, self.testing_states)
-        self.bs = BernoulliSimulator(
+        self.bs = Simulator(
             self.bhmm,
             self.testing_states,
             self.num_bins,
