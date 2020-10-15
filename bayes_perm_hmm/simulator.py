@@ -26,7 +26,7 @@ exact_fields = [
 ExactNoResults = NamedTuple('ExactNoResults', exact_fields)
 ExactResults = NamedTuple(
     'ExactResults',
-    exact_fields + [('results', ExactRun)],
+    exact_fields + [('runs', ExactRun)],
 )
 
 empirical_fields = [
@@ -38,7 +38,7 @@ empirical_fields = [
 EmpiricalNoResults = NamedTuple('EmpiricalNoResults', empirical_fields)
 EmpiricalResults = NamedTuple(
     'EmpiricalResults',
-    empirical_fields + [('results', EmpiricalRun)],
+    empirical_fields + [('runs', EmpiricalRun)],
 )
 
 
