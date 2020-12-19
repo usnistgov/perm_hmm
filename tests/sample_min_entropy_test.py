@@ -1,5 +1,5 @@
 import unittest
-from bayes_perm_hmm.min_entropy_hmm import PermutedDiscreteHMM
+from bayes_perm_hmm.min_entropy import PermutedDiscreteHMM
 import torch
 import pyro
 import pyro.distributions as dist

@@ -4,7 +4,7 @@ An example using the parameters from a Beryllium 9 system.
 import argparse
 import torch
 import pyro.distributions as dist
-from bayes_perm_hmm.min_entropy_hmm import PermutedDiscreteHMM
+from bayes_perm_hmm.min_entropy import PermutedDiscreteHMM
 from bayes_perm_hmm.simulator import Simulator
 from bayes_perm_hmm.physical_systems import beryllium
 

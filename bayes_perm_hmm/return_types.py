@@ -52,32 +52,6 @@ class AllRates(NamedTuple):
     """
 
 
-class MinEntHistory(NamedTuple):
-    r"""
-    Contains the posterior log initial state distributions
-    and the minimal expected posterior entropies,
-    the quantities which are optimized over permutations to select the optimal
-    permutations.
-
-    .. seealso:: class :py:class:`PermWithHistory`
-    """
-    partial_post_log_init_dists: torch.Tensor
-    r""":py:class:`torch.Tensor`, float.
-    The posterior log initial
-    state distributions recorded for each time step, :math:`p(s_0 | y^{i-1})`
-
-        shape ``(time_dim, state_dim)``
-    """
-    expected_entropy: torch.Tensor
-    r""":py:class:`torch.Tensor`, float.
-    The minimal expected entropy.
-
-        .. math::
-            \operatorname{min}_{\sigma}H_\sigma(S_0|Y^i, y^{i-1})
-
-        shape ``(time_dim,)``
-    """
-
 hmm_fields = [
     ('states', torch.Tensor),
     ('observations', torch.Tensor),
@@ -89,9 +63,9 @@ PermHMMOutput = NamedTuple(
     'PermHMMOutput',
     perm_hmm_fields,
 )
-MinEntHMMOutput = NamedTuple(
+PHMMOutHistory = NamedTuple(
     'MinEntHMMOutput',
-    perm_hmm_fields + [('history', MinEntHistory)]
+    perm_hmm_fields + [('history', dict)]
 )
 
 
@@ -179,11 +153,7 @@ class PermWithHistory(NamedTuple):
     """:py:class:`torch.Tensor`.
     Contains the optimal permtutations applied.
     """
-    history: MinEntHistory
-    """:py:class:`MinEntHistory`.
-    contains the history of the computation used to
-    compute the optimal permutations.
-    """
+    history: dict
 
 class InterruptedParameters(NamedTuple):
     bright_param: torch.Tensor

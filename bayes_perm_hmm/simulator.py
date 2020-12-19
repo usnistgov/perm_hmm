@@ -8,7 +8,7 @@ from typing import NamedTuple
 import torch
 
 from bayes_perm_hmm.interrupted import InterruptedClassifier
-from bayes_perm_hmm.sampleable import SampleableDiscreteHMM
+from bayes_perm_hmm.hmms import SampleableDiscreteHMM
 from bayes_perm_hmm.return_types import ExperimentParameters, ExactRun, \
     HMMOutPostDist, EmpiricalRun, PermutedParameters
 from bayes_perm_hmm.util import num_to_data
@@ -59,7 +59,7 @@ class Simulator(object):
         """
         Initializes the experiment.
 
-        :param bayes_perm_hmm.min_entropy_hmm.PermutedDiscreteHMM bayes_hmm:
+        :param bayes_perm_hmm.min_entropy.PermutedDiscreteHMM bayes_hmm:
             the model whose
             misclassification rate will be computed. The naive_hmm parameters
             will be classified from those of bayes_hmm.

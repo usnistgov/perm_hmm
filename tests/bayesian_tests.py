@@ -4,8 +4,8 @@ from copy import deepcopy
 import torch
 import pyro.distributions as dist
 import pyro
-from bayes_perm_hmm.sampleable import SampleableDiscreteHMM
-from bayes_perm_hmm.min_entropy_hmm import PermutedDiscreteHMM
+from bayes_perm_hmm.hmms import SampleableDiscreteHMM
+from bayes_perm_hmm.min_entropy import PermutedDiscreteHMM
 from bayes_perm_hmm.util import bin_ent, ZERO
 
 

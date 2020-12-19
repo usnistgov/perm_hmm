@@ -3,9 +3,9 @@ import torch
 import torch.distributions
 import pyro
 import pyro.distributions as dist
-from bayes_perm_hmm.sampleable import SampleableDiscreteHMM
-import bayes_perm_hmm.min_entropy_hmm as meh
-from bayes_perm_hmm.min_entropy_hmm import PermutedDiscreteHMM
+from bayes_perm_hmm.hmms import SampleableDiscreteHMM
+import bayes_perm_hmm.min_entropy as meh
+from bayes_perm_hmm.min_entropy import PermutedDiscreteHMM
 from bayes_perm_hmm.interrupted import InterruptedClassifier
 from bayes_perm_hmm.training import train, exact_train
 import bayes_perm_hmm.postprocessing as pp
