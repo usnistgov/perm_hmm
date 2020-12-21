@@ -398,6 +398,14 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
                 perms,
             )
 
+    def expand_with_perm(self, perm):
+        batch_shape = perm.shape[:-1]
+        t_logits = self.transition_logits.expand(
+            batch_shape + self.transition_logits.shape[-2:]
+        )
+        t_logits = t_logits[wrap_index(perm, batch_shape=perm.shape[:-1])]
+        return SampleableDiscreteHMM(self.initial_logits, t_logits, self.observation_dist)
+
     def posterior_log_initial_state_dist(self, data, perm=None):
         """
         The posterior log initial state distributions for the data, given the
@@ -413,6 +421,7 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
             batch_shape = perm.shape[:-1]
             if data.shape[:len(data.shape)-self.observation_dist.event_dim] != batch_shape:
                 raise ValueError("Perms and data do not have the same batch shape.")
+            # TODO: DRY this code.
             t_logits = self.transition_logits.expand(
                 batch_shape + self.transition_logits.shape[-2:]
             )

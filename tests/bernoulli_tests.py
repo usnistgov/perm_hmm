@@ -1,15 +1,10 @@
 import unittest
-import sys
 import torch
 import pyro.distributions as dist
-import pyro
-from perm_hmm.interrupted import InterruptedClassifier
+from perm_hmm.classifiers.interrupted import InterruptedClassifier
 from perm_hmm.hmms import SampleableDiscreteHMM, PermutedDiscreteHMM
 from perm_hmm.simulator import Simulator
-from perm_hmm.postprocessing import InterruptedEmpiricalPostprocessor, InterruptedExactPostprocessor
-import perm_hmm.interrupted_training
-from perm_hmm.util import ZERO, transpositions, num_to_data
-
+from perm_hmm.util import transpositions
 
 
 class MyTestCase(unittest.TestCase):

@@ -10,7 +10,7 @@ import perm_hmm.return_types
 from perm_hmm.return_types import RateWithInterval, \
     AllRatesWithIntervals, AllRates
 from perm_hmm.util import entropy
-import perm_hmm.interrupted
+import perm_hmm.classifiers.interrupted
 from perm_hmm.util import ZERO
 
 

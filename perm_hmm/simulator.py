@@ -2,16 +2,13 @@
 Simulates the initial state discrimination experiment using different
 methods, to compare the resulting error rates.
 """
-import warnings
 from typing import NamedTuple
 
 import torch
 
-from perm_hmm.interrupted import InterruptedClassifier
-from perm_hmm.hmms import SampleableDiscreteHMM
-from perm_hmm.strategies.min_ent import MinEntropySelector
-from perm_hmm.return_types import ExperimentParameters, ExactRun, \
-    HMMOutPostDist, EmpiricalRun, PermutedParameters
+from perm_hmm.classifiers.interrupted import InterruptedClassifier
+from perm_hmm.return_types import ExactRun, \
+    HMMOutPostDist, EmpiricalRun
 from perm_hmm.util import num_to_data
 from perm_hmm.interrupted_training import train, exact_train
 from perm_hmm.postprocessing import InterruptedExactPostprocessor, \
@@ -81,8 +78,7 @@ class HMMSimulator(object):
         The number of time steps to compute for.
         """
 
-    def hmm_all_classifications(self, perm_selector=None, save_history=False,
-                                classifier=None):
+    def all_classifications(self, perm_selector=None, save_history=False, classifier=None):
         """
         Computes the data required to compute the exact misclassification rates
         of the three models under consideration, the HMM with permtuations,
@@ -112,8 +108,6 @@ class HMMSimulator(object):
         data = torch.stack(
             [num_to_data(num, self.num_bins, base) for num in range(base**self.num_bins)]
         ).float()
-        if hmm is None:
-            hmm = self.hmm
         if perm_selector is None:
             lp = hmm.log_prob(data)
             dist = hmm.posterior_log_initial_state_dist(data)

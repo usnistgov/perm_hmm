@@ -1,5 +1,5 @@
 import torch
-import perm_hmm.interrupted
+import perm_hmm.classifiers.interrupted
 import perm_hmm.postprocessing
 
 

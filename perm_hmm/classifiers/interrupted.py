@@ -9,9 +9,10 @@ which "collects enough evidence".
 import torch
 from perm_hmm.util import first_nonzero, indices
 from perm_hmm.return_types import ClassBreakRatio
+from perm_hmm.classifiers.generic_classifiers import Classifier
 
 
-class InterruptedClassifier(object):
+class InterruptedClassifier(Classifier):
     r"""
     A classifier which will terminate before the end of a run if a likelihood ratio exceeds a threshold.
 
