@@ -1,5 +1,10 @@
 import torch
+from operator import mul
+from functools import reduce
+from functools import wraps
 from perm_hmm.return_types import PermWithHistory
+
+
 
 
 class PermSelector(object):
@@ -11,7 +16,7 @@ class PermSelector(object):
     a calibration method.
     """
 
-    def __init__(self, possible_perms):
+    def __init__(self, possible_perms, save_history=False):
         n_perms, n_states = possible_perms.shape
         if not (possible_perms.long().sort(-1).values ==
                 torch.arange(n_states, dtype=torch.long).expand(
@@ -20,9 +25,51 @@ class PermSelector(object):
             raise ValueError("The input permutations are not permutations of "
                              "the integers [0, ..., n_states]")
         self.possible_perms = possible_perms
-        self.history = None
+        self._calc_history = {}
+        self._perm_history = []
+        self.shape = None
+        self.save_history = save_history
 
-    def perm(self, data: torch.Tensor, save_history=False):
+    @property
+    def perm_history(self):
+        if len(self._perm_history) == 0:
+            return torch.Tensor()
+        else:
+            try:
+                return torch.stack(self._perm_history)
+            except RuntimeError:
+                return self._perm_history
+
+    @perm_history.setter
+    def perm_history(self, val):
+        self._perm_history = val
+
+    @perm_history.deleter
+    def perm_history(self):
+        del self._perm_history
+
+    @property
+    def calc_history(self):
+        if len(self._calc_history) == 0:
+            return self._calc_history
+        if any([len(v) == 0 for v in self._calc_history.values()]):
+            return self._calc_history
+        if self.shape is None:
+            return self._calc_history
+        try:
+            return {k: torch.stack([x.reshape(self.shape) for x in v]) for k, v in self._calc_history.items()}
+        except RuntimeError:
+            return self._calc_history
+
+    @calc_history.setter
+    def calc_history(self, val):
+        self._calc_history = val
+
+    @calc_history.deleter
+    def calc_history(self):
+        del self._calc_history
+
+    def perm(self, data: torch.Tensor, shape=()):
         """
         Takes a (vectorized) input of data from a single time step,
         and returns a (correspondingly shaped) permutation.
@@ -38,7 +85,10 @@ class PermSelector(object):
         """
         raise NotImplementedError
 
-    def get_perms(self, data, obs_event_dim, save_history=False):
+    def reset(self, save_history=False):
+        pass
+
+    def get_perms(self, data, time_dim, save_history=False):
         r"""
         Given a run of data, returns the posterior initial state distributions,
         the optimal permutations according to
@@ -73,20 +123,67 @@ class PermSelector(object):
         .. seealso:: method :py:meth:`PermutedDiscreteHMM.sample_min_entropy`
         """
         d_shape = data.shape
-        shape = d_shape[:len(d_shape) - obs_event_dim]
+        m = len(d_shape)
+        if time_dim <= 0:
+            obs_event_dim = -time_dim
+        else:
+            obs_event_dim = m - time_dim
+        shape = d_shape[:m - obs_event_dim]
         max_t = shape[-1]
         perms = []
+        self.reset(save_history=save_history)
         for i in range(max_t):
-            perms.append(self.perm_selector.perm(
+            perms.append(self.perm(
                 data[(..., i) + (
                     slice(None),) * obs_event_dim],
-                save_history=save_history,
             ))
         perms = torch.stack(perms, -2)
-        if save_history:
-            return PermWithHistory(
-                perms,
-                self.perm_selector.history,
-            )
-        else:
+        return perms
+
+    @classmethod
+    def manage_shape(cls, perm):
+        @wraps(perm)
+        def _wrapper(self, *args, **kwargs):
+            event_dims = kwargs.get("event_dims", 0)
+            try:
+                data_shape = args[0].shape
+                shape = data_shape[:len(data_shape) - event_dims]
+            except (AttributeError, IndexError):
+                shape = None
+            self_shape = getattr(self, "shape", None)
+            if self_shape is None:
+                if shape is not None:
+                    self.shape = shape
+            data = args[0]
+            if shape is not None:
+                data = data.reshape((reduce(mul, self.shape, 1),) + data_shape[:len(data_shape) - event_dims])
+            perms = perm(self, data, *args[1:], **kwargs)
+            if shape is not None:
+                perms.reshape(shape + perms.shape[-1:])
             return perms
+        return _wrapper
+
+    @classmethod
+    def manage_calc_history(cls, perm):
+        @wraps(perm)
+        def _wrapper(self, *args, **kwargs):
+            save_history = getattr(self, "save_history", False)
+            retval = perm(self, *args, **kwargs)
+            perms, calc_history = retval
+            if save_history:
+                for k, v in calc_history.items():
+                    try:
+                        self._calc_history[k].append(v)
+                    except KeyError:
+                        self._calc_history[k] = [v]
+            return perms
+        return _wrapper
+
+    @classmethod
+    def manage_perm_history(cls, perm):
+        @wraps(perm)
+        def _wrapper(self, *args, **kwargs):
+            perms = perm(self, *args, **kwargs)
+            self._perm_history.append(perms)
+            return perms
+        return _wrapper

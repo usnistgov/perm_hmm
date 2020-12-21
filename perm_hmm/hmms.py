@@ -251,7 +251,7 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
     def from_hmm(cls, hmm: DiscreteHMM):
         return cls(hmm.initial_logits, hmm.transition_logits, hmm.observation_dist)
 
-    def sample(self, sample_shape=(), perm_selector: PermSelector=None, save_history=False):
+    def sample(self, sample_shape=(), perm_selector: PermSelector=None):
         r"""
         This method allows us to sample from the HMM with the minimum expected
         posterior entropy heuristic.
@@ -345,7 +345,6 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
             torch.empty(
                 flat_shape + self.observation_dist.event_shape, dtype=dtype
             )
-        perms = torch.zeros(flat_shape + (len(self.initial_logits),), dtype=int)
 
         with pyro.plate("batches", total_batches) as batch:
             states[batch, 0] = pyro.sample(
@@ -360,8 +359,7 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
             )
             for t in pyro.markov(range(1, flat_shape[-1])):
                 shaped_o = observations[batch, t-1].reshape(shape[:-1] + self.observation_dist.event_shape)
-                perms[batch, t-1] = perm_selector.perm(shaped_o, save_history=save_history).reshape(total_batches, len(self.initial_logits))
-                perm = perms[batch, t-1]
+                perm = perm_selector.perm(shaped_o, event_dims=self.observation_dist.event_dim).reshape(total_batches, len(self.initial_logits))
                 states[batch, t] = pyro.sample(
                     "x_{}_{}".format(batch, t),
                     dist.Categorical(
@@ -376,27 +374,16 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
                         flat_params[batch, states[batch, t]]
                     ),
                 )
-            perms[batch, -1] = perm_selector.perm(observations[batch, -1], save_history=save_history).reshape(total_batches, len(self.initial_logits))
+            perm = perm_selector.perm(observations[batch, -1], event_dims=self.observation_dist.event_dim).reshape(total_batches, len(self.initial_logits))
         states = states.reshape(shape)
         observations = observations.reshape(shape + self.observation_dist.event_shape)
-        perms = perms.reshape(shape + (len(self.initial_logits),))
         if (self.event_shape[0] == 1) and (sample_shape == ()):
             states.squeeze_(0)
             observations.squeeze_(0)
-            perms.squeeze_(0)
-        if save_history:
-            return PHMMOutHistory(
-                states,
-                observations,
-                perms,
-                perm_selector.history
-            )
-        else:
-            return PermHMMOutput(
-                states,
-                observations,
-                perms,
-            )
+        return HMMOutput(
+            states,
+            observations,
+        )
 
     def expand_with_perm(self, perm):
         batch_shape = perm.shape[:-1]
