@@ -7,13 +7,14 @@ from typing import NamedTuple
 
 import torch
 
-from bayes_perm_hmm.interrupted import InterruptedClassifier
-from bayes_perm_hmm.hmms import SampleableDiscreteHMM
-from bayes_perm_hmm.return_types import ExperimentParameters, ExactRun, \
+from perm_hmm.interrupted import InterruptedClassifier
+from perm_hmm.hmms import SampleableDiscreteHMM
+from perm_hmm.strategies.min_ent import MinEntropySelector
+from perm_hmm.return_types import ExperimentParameters, ExactRun, \
     HMMOutPostDist, EmpiricalRun, PermutedParameters
-from bayes_perm_hmm.util import num_to_data
-from bayes_perm_hmm.training import train, exact_train
-from bayes_perm_hmm.postprocessing import InterruptedExactPostprocessor, \
+from perm_hmm.util import num_to_data
+from perm_hmm.interrupted_training import train, exact_train
+from perm_hmm.postprocessing import InterruptedExactPostprocessor, \
     PostDistExactPostprocessor, InterruptedEmpiricalPostprocessor, \
     PostDistEmpiricalPostprocessor
 
@@ -42,24 +43,13 @@ EmpiricalResults = NamedTuple(
 )
 
 
-class Simulator(object):
-    """
-    Simulates an experiment with Bernoulli outcomes.
+class HMMSimulator(object):
 
-    Simulates both an experiment where all possible runs are computed
-    (by brute force, in exponential time), or an approximate experiment,
-    where we sample from the HMMs and estimate the resulting misclassification
-    rates. By default, the experiments include comparisons to both a naive HMM
-    where no permutations occur and we use a MAP estimator, and an "interrupted"
-    classifier, which terminates a data collection cycle if a likelihood
-    threshold has been crossed.
-    """
-
-    def __init__(self, bayes_hmm, testing_states, num_bins):
+    def __init__(self, hmm, testing_states, num_bins):
         """
         Initializes the experiment.
 
-        :param bayes_perm_hmm.min_entropy.PermutedDiscreteHMM bayes_hmm:
+        :param bayes_perm_hmm.hmms.PermutedDiscreteHMM hmm:
             the model whose
             misclassification rate will be computed. The naive_hmm parameters
             will be classified from those of bayes_hmm.
@@ -68,11 +58,11 @@ class Simulator(object):
 
         :raises: ValueError
         """
-        self.bayes_hmm = bayes_hmm
+        self.hmm = hmm
         """:py:class:`PermutedDiscreteHMM`
         The model whose misclassification rates we wish to analyze.
         """
-        num_states = len(self.bayes_hmm.initial_logits)
+        num_states = len(self.hmm.initial_logits)
         lts = testing_states.tolist()
         sts = set(lts)
         if not len(sts) == len(lts):
@@ -90,34 +80,150 @@ class Simulator(object):
         """:py:class:`int`
         The number of time steps to compute for.
         """
-        self.hmm = SampleableDiscreteHMM(self.bayes_hmm.initial_logits,
-                                         self.bayes_hmm.transition_logits,
-                                         self.bayes_hmm.observation_dist)
-        """:py:class:`SampleableDiscreteHMM`
-        The corresponding model the input `bayes_hmm` whose performance we wish
-        to compare to.
+
+    def hmm_all_classifications(self, perm_selector=None, save_history=False,
+                                classifier=None):
+        """
+        Computes the data required to compute the exact misclassification rates
+        of the three models under consideration, the HMM with permtuations,
+        the HMM without permtuations, and the InterruptedClassifier.
+
+        :returns: :py:class:`ExactResults` with components
+
+            .interrupted_postprocessor: :py:class:`InterruptedExactPostprocessor`.
+            Use it to compute the
+            misclassification rates of the :py:class:`InterruptedClassifier`.
+
+            .naive_postprocessor: :py:class:`PostDistExactPostprocessor`.
+            Use it to compute the misclassification rates of the HMM classifier
+            without permutations.
+
+            .bayes_postprocessor: :py:class:`PostDistExactPostprocessor`.
+            Use it to compute the misclassification rates of the HMM classifier
+            with permutations.
+
+            .runs: :py:class:`ExactRun`
+            All the data which was used to produce the objects.
+            returned just in case we would like to save it for later. See
+            :py:meth:`BernoulliSimulator._exact_single_run`
+            for details on members.
+        """
+        base = len(self.hmm.observation_dist.enumerate_support())
+        data = torch.stack(
+            [num_to_data(num, self.num_bins, base) for num in range(base**self.num_bins)]
+        ).float()
+        if hmm is None:
+            hmm = self.hmm
+        if perm_selector is None:
+            lp = hmm.log_prob(data)
+            dist = hmm.posterior_log_initial_state_dist(data)
+        else:
+            result = perm_selector.get_perms(data, save_history=save_history)
+            if save_history:
+                perm = result.perm
+            else:
+                perm = result
+            lp = self.hmm.log_prob_with_perm(data, perm)
+            dist = self.hmm.posterior_log_initial_state_dist(data, perm)
+
+        classifications = classifier.classify(data)
+        ep = PostDistExactPostprocessor(
+            lp,
+            dist,
+            self.hmm.initial_logits,
+            self.testing_states,
+            classifications,
+        )
+        if perm_selector is not None:
+            return ep, result
+        return ep
+
+    def ic_all_classifications(self, ic):
+        base = len(self.hmm.observation_dist.enumerate_support())
+        data = torch.stack(
+            [num_to_data(num, self.num_bins, base) for num in range(base**self.num_bins)]
+        ).float()
+        results = ic.classify(data)
+        ip = InterruptedExactPostprocessor(
+            naive_lp,
+            naive_dist,
+            self.hmm.initial_logits,
+            self.testing_states,
+            interrupted_results,
+        )
+
+
+
+
+class Simulator(object):
+    """
+    Simulates an experiment with Bernoulli outcomes.
+
+    Simulates both an experiment where all possible runs are computed
+    (by brute force, in exponential time), or an approximate experiment,
+    where we sample from the HMMs and estimate the resulting misclassification
+    rates. By default, the experiments include comparisons to both a naive HMM
+    where no permutations occur and we use a MAP estimator, and an "interrupted"
+    classifier, which terminates a data collection cycle if a likelihood
+    threshold has been crossed.
+    """
+
+    def __init__(self, phmm, testing_states, num_bins):
+        """
+        Initializes the experiment.
+
+        :param bayes_perm_hmm.hmms.PermutedDiscreteHMM phmm:
+            the model whose
+            misclassification rate will be computed. The naive_hmm parameters
+            will be classified from those of bayes_hmm.
+        :param torch.Tensor testing_states: states to perform hypothesis tests for.
+        :param int num_bins: time dimension of data to be collected.
+
+        :raises: ValueError
+        """
+        self.hmm = phmm
+        """:py:class:`PermutedDiscreteHMM`
+        The model whose misclassification rates we wish to analyze.
+        """
+        num_states = len(self.hmm.initial_logits)
+        lts = testing_states.tolist()
+        sts = set(lts)
+        if not len(sts) == len(lts):
+            raise ValueError("States to test for must be unique.")
+        if len(lts) <= 1:
+            raise ValueError("Must attempt to discriminate between at least two"
+                             "states.")
+        if not set(testing_states.tolist()).issubset(range(num_states)):
+            raise ValueError("States to test for must be states of the model.")
+        self.testing_states = testing_states
+        """
+        states to test for.
+        """
+        self.num_bins = num_bins
+        """:py:class:`int`
+        The number of time steps to compute for.
         """
         self.ic = InterruptedClassifier(
-            self.bayes_hmm.observation_dist,
+            self.hmm.observation_dist,
             testing_states,
         )
         """:py:class:`InterruptedClassifier`
         The corresponding model to the input `bayes_hmm`
         whose performance we wish to compare to
         """
-        self.experiment_parameters = ExperimentParameters(
-            PermutedParameters(
-                self.bayes_hmm.initial_logits,
-                self.bayes_hmm.transition_logits,
-                self.bayes_hmm.observation_dist._param,
-                self.bayes_hmm.possible_perms,
-            ),
-            self.testing_states,
-            torch.tensor(self.num_bins),
-        )
+        # self.experiment_parameters = ExperimentParameters(
+        #     PermutedParameters(
+        #         self.hmm.initial_logits,
+        #         self.hmm.transition_logits,
+        #         self.hmm.observation_dist._param,
+        #         self.hmm.possible_perms,
+        #     ),
+        #     self.testing_states,
+        #     torch.tensor(self.num_bins),
+        # )
 
     def exact_train_ic(self, num_ratios=20):
-        base = len(self.bayes_hmm.observation_dist.enumerate_support())
+        base = len(self.hmm.observation_dist.enumerate_support())
         data = torch.stack(
             [num_to_data(num, self.num_bins, base) for num in range(base**self.num_bins)]
         ).float()
@@ -154,10 +260,10 @@ class Simulator(object):
         states = hmm_out.states
         observations = hmm_out.observations
         ground_truth = states[:, 0]
-        _ = train(self.ic, observations, ground_truth, self.bayes_hmm.initial_logits.shape[-1], num_ratios=num_ratios)
+        _ = train(self.ic, observations, ground_truth, self.hmm.initial_logits.shape[-1], num_ratios=num_ratios)
         return hmm_out
 
-    def exact_simulation(self, return_raw=True):
+    def exact_simulation(self, possible_perms, return_raw=True):
         """
         Computes the data required to compute the exact misclassification rates
         of the three models under consideration, the HMM with permtuations,
@@ -185,20 +291,20 @@ class Simulator(object):
         """
         if self.ic.ratio is None:
             raise ValueError("Must train interrupted classifier first. Use .exact_train_ic")
-        base = len(self.bayes_hmm.observation_dist.enumerate_support())
+        base = len(self.hmm.observation_dist.enumerate_support())
         data = torch.stack(
             [num_to_data(num, self.num_bins, base) for num in range(base**self.num_bins)]
         ).float()
         naive_lp = self.hmm.log_prob(data)
         naive_dist = self.hmm.posterior_log_initial_state_dist(data)
-        bayes_result = self.bayes_hmm.get_perms(data, save_history=return_raw)
+        bayes_result = self.hmm.get_perms(data, save_history=return_raw)
         if return_raw:
-            perm = bayes_result.optimal_perm
+            perm = bayes_result.perm
         else:
             perm = bayes_result
-        bayes_lp = self.bayes_hmm.log_prob_with_perm(data, perm)
+        bayes_lp = self.hmm.log_prob_with_perm(data, perm)
         bayes_plisd = \
-            self.bayes_hmm.posterior_log_initial_state_dist(data, perm)
+            self.hmm.posterior_log_initial_state_dist(data, perm)
         interrupted_results = self.ic.classify(data)
         if return_raw:
             results = ExactRun(
@@ -208,19 +314,19 @@ class Simulator(object):
         naive_ep = PostDistExactPostprocessor(
             naive_lp,
             naive_dist,
-            self.bayes_hmm.initial_logits,
+            self.hmm.initial_logits,
             self.testing_states,
         )
         bayes_ep = PostDistExactPostprocessor(
             bayes_lp,
             bayes_plisd,
-            self.bayes_hmm.initial_logits,
+            self.hmm.initial_logits,
             self.testing_states,
         )
         ip = InterruptedExactPostprocessor(
             naive_lp,
             naive_dist,
-            self.bayes_hmm.initial_logits,
+            self.hmm.initial_logits,
             self.testing_states,
             interrupted_results,
         )
@@ -271,7 +377,7 @@ class Simulator(object):
         if self.ic.ratio is None:
             raise ValueError("Must train interrupted classifier first with .train_ic")
         bayes_output = \
-            self.bayes_hmm.sample_min_entropy((num_samples, self.num_bins))
+            self.hmm.sample_min_entropy((num_samples, self.num_bins))
         naive_output = self.hmm.sample((num_samples, self.num_bins))
         naive_data = naive_output.observations
         naive_plisd = self.hmm.posterior_log_initial_state_dist(naive_data)
@@ -286,19 +392,19 @@ class Simulator(object):
         naive_ep = PostDistEmpiricalPostprocessor(
             results.naive.hmm_output.states[..., 0],
             self.testing_states,
-            self.bayes_hmm.initial_logits.shape[-1],
+            self.hmm.initial_logits.shape[-1],
             results.naive.log_post_dist,
         )
         bayes_ep = PostDistEmpiricalPostprocessor(
             results.bayes.states[..., 0],
             self.testing_states,
-            self.bayes_hmm.initial_logits.shape[-1],
+            self.hmm.initial_logits.shape[-1],
             results.bayes.history.partial_post_log_init_dists[..., -1, :],
         )
         ip = InterruptedEmpiricalPostprocessor(
             results.naive.hmm_output.states[..., 0],
             self.testing_states,
-            self.bayes_hmm.initial_logits.shape[-1],
+            self.hmm.initial_logits.shape[-1],
             *interrupted_results
         )
         if return_raw:

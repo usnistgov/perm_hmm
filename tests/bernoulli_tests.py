@@ -3,13 +3,12 @@ import sys
 import torch
 import pyro.distributions as dist
 import pyro
-from bayes_perm_hmm.min_entropy import PermutedDiscreteHMM
-from bayes_perm_hmm.interrupted import InterruptedClassifier
-from bayes_perm_hmm.hmms import SampleableDiscreteHMM
-from bayes_perm_hmm.simulator import Simulator
-from bayes_perm_hmm.postprocessing import InterruptedEmpiricalPostprocessor, InterruptedExactPostprocessor
-import bayes_perm_hmm.training
-from bayes_perm_hmm.util import ZERO, transpositions, num_to_data
+from perm_hmm.interrupted import InterruptedClassifier
+from perm_hmm.hmms import SampleableDiscreteHMM, PermutedDiscreteHMM
+from perm_hmm.simulator import Simulator
+from perm_hmm.postprocessing import InterruptedEmpiricalPostprocessor, InterruptedExactPostprocessor
+import perm_hmm.interrupted_training
+from perm_hmm.util import ZERO, transpositions, num_to_data
 
 
 

@@ -11,7 +11,7 @@ import sys
 import scipy
 import scipy.special
 import networkx as nx
-from bayes_perm_hmm.util import ZERO
+from perm_hmm.util import ZERO
 
 
 l_to_fmf = dict([

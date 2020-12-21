@@ -5,6 +5,7 @@ strategy which involves applying permutations between observations yields an
 appreciable advantage.
 """
 
-import bayes_perm_hmm.min_entropy
-import bayes_perm_hmm.util
-import bayes_perm_hmm.hmms
+import perm_hmm.strategies
+import perm_hmm.strategies.min_ent
+import perm_hmm.util
+import perm_hmm.hmms

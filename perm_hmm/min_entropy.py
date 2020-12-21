@@ -16,10 +16,10 @@ import pyro.distributions as dist
 from pyro.distributions import DiscreteHMM
 from pyro.distributions.hmm import _logmatmulexp
 from pyro.distributions.util import broadcast_shape
-from bayes_perm_hmm.hmms import SampleableDiscreteHMM, random_hmm
-from bayes_perm_hmm.return_types import HMMOutput, PostYPostS0, GenDistEntropy, \
+from perm_hmm.hmms import SampleableDiscreteHMM, random_hmm
+from perm_hmm.return_types import HMMOutput, PostYPostS0, GenDistEntropy, \
     MinEntHistory, PermWithHistory, PHMMOutHistory, PermHMMOutput
-from bayes_perm_hmm.util import ZERO, wrap_index, id_and_transpositions
+from perm_hmm.util import ZERO, wrap_index, id_and_transpositions
 import copy
 
 
@@ -799,7 +799,7 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
             shapes.
 
         .. seealso:: Method
-            :py:meth:`bayes_perm_hmm.sampleable.SampleableDiscreteHMM.log_prob`
+            :py:meth:`perm_hmm.sampleable.SampleableDiscreteHMM.log_prob`
         """
         batch_shape = perm.shape[:-1]
         if data.shape[:len(data.shape)-self.observation_dist.event_dim] != batch_shape:

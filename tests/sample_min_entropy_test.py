@@ -1,9 +1,9 @@
 import unittest
-from bayes_perm_hmm.min_entropy import PermutedDiscreteHMM
+from perm_hmm.hmms import PermutedDiscreteHMM
 import torch
 import pyro
 import pyro.distributions as dist
-from bayes_perm_hmm.util import ZERO
+from perm_hmm.util import ZERO
 
 
 class MyTestCase(unittest.TestCase):

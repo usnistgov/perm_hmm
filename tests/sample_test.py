@@ -3,9 +3,8 @@ import torch
 import numpy as np
 import pyro.distributions as dist
 from pyro.distributions import DiscreteHMM
-from bayes_perm_hmm.hmms import SampleableDiscreteHMM
-from bayes_perm_hmm.min_entropy import PermutedDiscreteHMM
-from bayes_perm_hmm.util import ZERO, num_to_data
+from perm_hmm.hmms import SampleableDiscreteHMM, PermutedDiscreteHMM
+from perm_hmm.util import ZERO, num_to_data
 
 
 def to_base(x, y, max_length=None):

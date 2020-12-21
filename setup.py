@@ -4,7 +4,7 @@ with open("README.md", "r") as fh:
     long_desc = fh.read()
 
 setuptools.setup(
-    name="bayes_perm_hmm",
+    name="perm_hmm",
     version="0.0.1",
     author="Shawn Geller",
     author_email="shawn.geller@colorado.edu",

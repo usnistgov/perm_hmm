@@ -18,9 +18,9 @@ from pyro.distributions.hmm import DiscreteHMM
 from pyro.distributions.hmm import _sequential_logmatmulexp
 from pyro.distributions.util import broadcast_shape
 
-from bayes_perm_hmm.util import wrap_index, id_and_transpositions
-from bayes_perm_hmm.return_types import HMMOutput, PHMMOutHistory, PermHMMOutput
-from bayes_perm_hmm.strategies.selector import PermSelector
+from perm_hmm.util import wrap_index, id_and_transpositions
+from perm_hmm.return_types import HMMOutput, PHMMOutHistory, PermHMMOutput
+from perm_hmm.strategies.selector import PermSelector
 
 
 class SampleableDiscreteHMM(DiscreteHMM):
@@ -346,7 +346,6 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
                 flat_shape + self.observation_dist.event_shape, dtype=dtype
             )
         perms = torch.zeros(flat_shape + (len(self.initial_logits),), dtype=int)
-        perm_selector.start(shape, save_history)
 
         with pyro.plate("batches", total_batches) as batch:
             states[batch, 0] = pyro.sample(
@@ -360,7 +359,8 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
                 ),
             )
             for t in pyro.markov(range(1, flat_shape[-1])):
-                perms[batch, t-1] = perm_selector.perm(observations[batch, t-1], save_history=save_history)
+                shaped_o = observations[batch, t-1].reshape(shape[:-1] + self.observation_dist.event_shape)
+                perms[batch, t-1] = perm_selector.perm(shaped_o, save_history=save_history).reshape(total_batches, len(self.initial_logits))
                 perm = perms[batch, t-1]
                 states[batch, t] = pyro.sample(
                     "x_{}_{}".format(batch, t),
@@ -376,7 +376,7 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
                         flat_params[batch, states[batch, t]]
                     ),
                 )
-            perms[batch, -1] = perm_selector.perm(observations[batch, -1], save_history=save_history)
+            perms[batch, -1] = perm_selector.perm(observations[batch, -1], save_history=save_history).reshape(total_batches, len(self.initial_logits))
         states = states.reshape(shape)
         observations = observations.reshape(shape + self.observation_dist.event_shape)
         perms = perms.reshape(shape + (len(self.initial_logits),))
@@ -389,7 +389,7 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
                 states,
                 observations,
                 perms,
-                perm_selector.history,
+                perm_selector.history
             )
         else:
             return PermHMMOutput(
@@ -443,7 +443,7 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
             shapes.
 
         .. seealso:: Method
-            :py:meth:`bayes_perm_hmm.sampleable.SampleableDiscreteHMM.log_prob`
+            :py:meth:`perm_hmm.sampleable.SampleableDiscreteHMM.log_prob`
         """
         batch_shape = perm.shape[:-1]
         if data.shape[:len(data.shape)-self.observation_dist.event_dim] != batch_shape:

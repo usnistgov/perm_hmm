@@ -75,8 +75,8 @@ class LogProbAndPostDist(NamedTuple):
     Container for the log_prob and posterior distributions.
 
     .. seealso:: Used as input to
-        :py:class:`bayes_perm_hmm.postprocessing.ExactPostprocessor`,
-        :py:class:`bayes_perm_hmm.postprocessing.EmpiricalPostprocessor`
+        :py:class:`perm_hmm.postprocessing.ExactPostprocessor`,
+        :py:class:`perm_hmm.postprocessing.EmpiricalPostprocessor`
     """
     log_prob: torch.Tensor
     """:py:class:`torch.Tensor`, float.
@@ -149,7 +149,7 @@ class PermWithHistory(NamedTuple):
     .. seealso:: classes :py:class:`PermIndex`, :py:class:`MinEntHistory`,
         :py:class:`PermIndexWithHistory`
     """
-    optimal_perm: torch.Tensor
+    perm: torch.Tensor
     """:py:class:`torch.Tensor`.
     Contains the optimal permtutations applied.
     """
@@ -218,7 +218,7 @@ class HMMOutPostDist(NamedTuple):
     .. seealso:: Used in :py:class:`EmpiricalRun`
     """
     hmm_output: HMMOutput
-    """:py:class:`bayes_perm_hmm.sampleable.HMMOutput`
+    """:py:class:`perm_hmm.sampleable.HMMOutput`
     The data output by an HMM without permutations.
     """
     log_post_dist: torch.Tensor
@@ -244,7 +244,7 @@ class EmpiricalRun(NamedTuple):
     HMM without permutations.
     """
     bayes: MinEntHMMOutput
-    """:py:class:`bayes_perm_hmm.min_entropy_hmm.MinEntHMMOutput`
+    """:py:class:`perm_hmm.min_entropy_hmm.MinEntHMMOutput`
     The data returned in the empirical misclassifcation rate experiment by the
     HMM with permutations.
     """

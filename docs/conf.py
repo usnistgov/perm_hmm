@@ -12,12 +12,12 @@
 #
 # import os
 # import sys
-# sys.path.insert(0, '/home/shawn/Desktop/research/ion_storage/bayes_perm_hmm')
+# sys.path.insert(0, '/home/shawn/Desktop/research/ion_storage/perm_hmm')
 
 
 # -- Project information -----------------------------------------------------
 
-project = 'bayes_perm_hmm'
+project = 'perm_hmm'
 copyright = '2020, Author'
 author = 'Author'
 

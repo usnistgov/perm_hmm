@@ -3,12 +3,11 @@ import sys
 import torch
 import pyro.distributions as dist
 import pyro
-from bayes_perm_hmm.min_entropy import PermutedDiscreteHMM
-from bayes_perm_hmm.interrupted import InterruptedClassifier
-from bayes_perm_hmm.hmms import SampleableDiscreteHMM
-from bayes_perm_hmm.postprocessing import InterruptedEmpiricalPostprocessor, InterruptedExactPostprocessor
-import bayes_perm_hmm.training
-from bayes_perm_hmm.util import ZERO, transpositions, num_to_data
+from perm_hmm.interrupted import InterruptedClassifier
+from perm_hmm.hmms import SampleableDiscreteHMM, PermutedDiscreteHMM
+from perm_hmm.postprocessing import InterruptedEmpiricalPostprocessor, InterruptedExactPostprocessor
+import perm_hmm.interrupted_training
+from perm_hmm.util import ZERO, transpositions, num_to_data
 
 
 class MyTestCase(unittest.TestCase):
@@ -45,7 +44,7 @@ class MyTestCase(unittest.TestCase):
         while (~((ground_truth.unsqueeze(-1) == self.testing_states.unsqueeze(-2)).any(-2))).any(-1):
             training_data = self.hmm.sample((num_training_samples, time_dim))
             ground_truth = training_data.states[..., 0]
-        _ = bayes_perm_hmm.training.train(self.ic, training_data.observations, ground_truth, self.num_states)
+        _ = perm_hmm.interrupted_training.train(self.ic, training_data.observations, ground_truth, self.num_states)
         num_testing_samples = 300
         testing_data = self.hmm.sample((num_testing_samples, time_dim))
         class_break_ratio = self.ic.classify(testing_data.observations)

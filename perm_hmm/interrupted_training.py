@@ -1,6 +1,6 @@
 import torch
-import bayes_perm_hmm.interrupted
-import bayes_perm_hmm.postprocessing
+import perm_hmm.interrupted
+import perm_hmm.postprocessing
 
 
 def exact_train(ic, all_data, log_probs, log_post_dist, log_prior_dist,
@@ -24,7 +24,7 @@ def exact_train(ic, all_data, log_probs, log_post_dist, log_prior_dist,
         all_data,
         spaced_ratios,
     )
-    iep = bayes_perm_hmm.postprocessing.InterruptedExactPostprocessor(
+    iep = perm_hmm.postprocessing.InterruptedExactPostprocessor(
         log_probs,
         log_post_dist,
         log_prior_dist,
@@ -48,7 +48,7 @@ def train(ic, training_data, ground_truth, total_num_states, num_ratios=20):
     testing_states = ic.testing_states
     spaced_ratios = torch.arange(num_ratios, dtype=torch.float)
     interrupted_results = ic.classify(training_data, spaced_ratios)
-    iep = bayes_perm_hmm.postprocessing.InterruptedEmpiricalPostprocessor(
+    iep = perm_hmm.postprocessing.InterruptedEmpiricalPostprocessor(
         ground_truth,
         testing_states,
         total_num_states,

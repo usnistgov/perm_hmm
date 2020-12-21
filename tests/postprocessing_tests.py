@@ -3,13 +3,12 @@ import torch
 import torch.distributions
 import pyro
 import pyro.distributions as dist
-from bayes_perm_hmm.hmms import SampleableDiscreteHMM
-import bayes_perm_hmm.min_entropy as meh
-from bayes_perm_hmm.min_entropy import PermutedDiscreteHMM
-from bayes_perm_hmm.interrupted import InterruptedClassifier
-from bayes_perm_hmm.training import train, exact_train
-import bayes_perm_hmm.postprocessing as pp
-from bayes_perm_hmm.util import ZERO, transpositions, num_to_data
+import perm_hmm.hmms
+from perm_hmm.hmms import SampleableDiscreteHMM, PermutedDiscreteHMM
+from perm_hmm.interrupted import InterruptedClassifier
+from perm_hmm.interrupted_training import train, exact_train
+import perm_hmm.postprocessing as pp
+from perm_hmm.util import ZERO, transpositions, num_to_data
 
 class MyTestCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -99,7 +98,7 @@ class MyTestCase(unittest.TestCase):
         print(mr)
         self.assertTrue(mr.confusions.sum(-1)[self.testing_states].allclose(torch.tensor(1.)))
         bp = pp.PostDistExactPostprocessor(
-            self.bdhmm.log_prob_with_perm(all_data, bayes_results.optimal_perm),
+            self.bdhmm.log_prob_with_perm(all_data, bayes_results.perm),
             bayes_results.history.partial_post_log_init_dists[..., -1, :],
             self.initial_logits,
             self.testing_states,
@@ -123,7 +122,7 @@ class MyTestCase(unittest.TestCase):
     def test_post_dist_emprirical_singleton(self):
         n = 5
         testing_states = torch.tensor([0, 1])
-        hmm = meh.random_phmm(n)
+        hmm = perm_hmm.hmms.random_phmm(n)
         x = hmm.sample_min_entropy((100,), save_history=False)
         plisd = hmm.posterior_log_initial_state_dist(x.observations, x.perm)
         ep = pp.PostDistEmpiricalPostprocessor(x.states, testing_states, n, plisd)

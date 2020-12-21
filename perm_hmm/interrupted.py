@@ -1,14 +1,14 @@
 """
 This module defines the interrupted classification scheme, which contrasts with
-the schemes in the :py:mod:`bayes_perm_hmm.bayes_perm_hmm.bayesian_tracking`
+the schemes in the :py:mod:`perm_hmm.perm_hmm.bayesian_tracking`
 module.
 Using a simple model with no transitions, we can make an inference based on data
 which "collects enough evidence".
 """
 
 import torch
-from bayes_perm_hmm.util import first_nonzero, indices
-from bayes_perm_hmm.return_types import ClassBreakRatio
+from perm_hmm.util import first_nonzero, indices
+from perm_hmm.return_types import ClassBreakRatio
 
 
 class InterruptedClassifier(object):
@@ -34,6 +34,7 @@ class InterruptedClassifier(object):
     """
 
     def __init__(self, dist, testing_states, ratio=None):
+        # TODO: Fix this class and its trainer.
         self.dist = dist
         self.testing_states = testing_states
         self.ratio = ratio

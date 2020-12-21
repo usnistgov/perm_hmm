@@ -1,5 +1,5 @@
 import unittest
-import bayes_perm_hmm.physical_systems.beryllium as beryllium
+import perm_hmm.physical_systems.beryllium as beryllium
 import numpy as np
 import scipy.stats
 import itertools

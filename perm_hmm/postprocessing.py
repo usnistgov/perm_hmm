@@ -6,12 +6,12 @@ import numpy as np
 import torch
 from scipy.stats import beta
 
-import bayes_perm_hmm.return_types
-from bayes_perm_hmm.return_types import RateWithInterval, \
+import perm_hmm.return_types
+from perm_hmm.return_types import RateWithInterval, \
     AllRatesWithIntervals, AllRates
-from bayes_perm_hmm.util import entropy
-import bayes_perm_hmm.interrupted
-from bayes_perm_hmm.util import ZERO
+from perm_hmm.util import entropy
+import perm_hmm.interrupted
+from perm_hmm.util import ZERO
 
 
 def clopper_pearson(alpha, num_successes, total_trials):
@@ -288,7 +288,7 @@ class PostDistExactPostprocessor(ExactPostprocessor):
     """
 
     def __init__(self, log_prob, log_post_dist, log_prior_dist, testing_states,
-                 classifications=None, score=None):
+                 classifications, score=None):
         """
         See superclass for details.
         Classifies the runs using the MAP classifier.
@@ -397,7 +397,7 @@ class InterruptedExactPostprocessor(ExactPostprocessor):
             postselected_post_dist,
             self.log_prior_dist,
             self.testing_states,
-            bayes_perm_hmm.return_types.ClassBreakRatio(
+            perm_hmm.return_types.ClassBreakRatio(
                 postselected_all_classifications,
                 postselected_all_break_flag,
                 postselected_all_ratios,

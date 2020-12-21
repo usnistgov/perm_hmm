@@ -16,10 +16,10 @@ import pyro.distributions as dist
 from pyro.distributions import DiscreteHMM
 from pyro.distributions.hmm import _logmatmulexp
 from pyro.distributions.util import broadcast_shape
-from bayes_perm_hmm.hmms import SampleableDiscreteHMM, random_hmm
-from bayes_perm_hmm.return_types import HMMOutput, PostYPostS0, GenDistEntropy, \
+from perm_hmm.hmms import SampleableDiscreteHMM, random_hmm
+from perm_hmm.return_types import HMMOutput, PostYPostS0, GenDistEntropy, \
     PermWithHistory, PHMMOutHistory, PermHMMOutput
-from bayes_perm_hmm.util import ZERO, wrap_index, id_and_transpositions
+from perm_hmm.util import ZERO, wrap_index, id_and_transpositions
 import copy
 from selector import PermSelector
 
@@ -272,24 +272,35 @@ class MinEntropySelector(PermSelector):
                 BayesCurrentCondInitialDistribution(
                     prior_log_cur_cond_init.repeat(n_perms, 1, 1)
                 )
+        self._history = {
+            "dist_array": [],
+            "entropy_array": [],
+        }
+        self.shape = None
 
     @property
     def history(self):
         try:
-            shape = self.shape
-        except AttributeError as e:
+            da = self._history["dist_array"]
+            ea = self._history["entropy_array"]
+        except KeyError:
             return self._history
-        dist_array = self._history["dist_array"]
-        entropy_array = self._history["entropy_array"]
-        val = {
-            dist_array: dist_array.reshape(shape + (self.state_dim,)),
-            entropy_array: entropy_array.reshape(shape),
-        }
-        return val
+        if (len(da) == 0) or (len(ea) == 0):
+            return self._history
+        if self.shape is None:
+            return self._history
+        try:
+            return {k: torch.stack([x.reshape(self.shape) for x in v]) for k, v in self._history.items()}
+        except RuntimeError:
+            return self._history
 
     @history.setter
-    def history(self, value):
-        self._history = value
+    def history(self, val):
+        self._history = val
+
+    @history.deleter
+    def history(self):
+        del self._history
 
     def to_perm_index(self, perm):
         """
@@ -315,19 +326,14 @@ class MinEntropySelector(PermSelector):
         pi.reshape(shape[:-1])
         return pi
 
-    def start(self, shape, save_history=False):
+    def reset(self):
         """
-        :param shape: sample_shape + batch_shape, without the event_shape
-        :param save_history:
-        :return:
+        Resets the selector.
         """
         if not self.calibrated:
             raise ValueError("Model is not yet calibrated.")
         n_perms = len(self.possible_perms)
         n_states = len(self.hmm.initial_logits)
-        total_batches = reduce(mul, shape[:-1], 1)
-        time_shape = shape[-1:]
-        flat_shape = (total_batches,) + time_shape
         self.prior_log_inits.logits = self.hmm.initial_logits.clone().detach()
         self.prior_log_current.logits = \
             self.hmm.initial_logits.clone().detach().repeat(n_perms, 1)
@@ -337,16 +343,12 @@ class MinEntropySelector(PermSelector):
             log_state_cond_initial_dist.logsumexp(axis=-1, keepdim=True)
         self.prior_log_cur_cond_init.logits = \
             log_state_cond_initial_dist.repeat(n_perms, 1, 1)
-        identity_perm = torch.arange(n_states, dtype=int)
-        identity_perm = identity_perm.expand((total_batches,) + (n_states,))
-        self.previous_perm = identity_perm
-        self.shape = shape
-        if save_history:
-            self.t = 0
-            self.history = {
-                "dist_array": torch.zeros(flat_shape + (self.state_dim,)),
-                "entropy_array": torch.zeros(flat_shape)
-            }
+        self.previous_perm = None
+        self.shape = None
+        self._history = {
+            "dist_array": [],
+            "entropy_array": [],
+        }
 
     def update_prior(self, val):
         """
@@ -363,6 +365,16 @@ class MinEntropySelector(PermSelector):
 
             shape ``batch_shape + (state_dim,)``
         """
+        if self.previous_perm is None:
+            n_states = len(self.hmm.initial_logits)
+            shape = val.shape
+            shape = shape[:len(shape) - self.hmm.observation_dist.event_dim]
+            total_batches = reduce(mul, shape, 1)
+            identity_perm = torch.arange(n_states, dtype=int)
+            identity_perm = identity_perm.expand((total_batches,) + (n_states,))
+            self.previous_perm = identity_perm
+            self.shape = shape
+        val = val.reshape((reduce(mul, self.shape, 1),) + self.hmm.observation_dist.event_shape)
         prev_perm_index = self.to_perm_index(self.previous_perm)
         transition_logits = self.hmm.transition_logits[self.possible_perms]
         observation_logits = \
@@ -460,13 +472,14 @@ class MinEntropySelector(PermSelector):
     def perm(self, data, save_history=False):
         self.update_prior(data)
         if save_history:
-            self.t += 1
-            self._history["dist_array"][:, self.t - 1] = self.prior_log_inits.logits
-        total_batches = data.shape[0]
-        n_perms = self.possible_perms.shape[0]
-        entropy = self.expected_entropy().expand(total_batches, n_perms)
+            self._history["dist_array"].append(self.prior_log_inits.logits)
+        # total_batches = data.shape[0]
+        # n_perms = self.possible_perms.shape[0]
+        # entropy = self.expected_entropy().expand(total_batches, n_perms)
+        entropy = self.expected_entropy()
         if save_history:
-            self._history["entropy_array"][:, self.t-1], perm_index = entropy.min(dim=-1)
+            entropy_array, perm_index = entropy.min(dim=-1)
+            self._history["entropy_array"].append(entropy_array)
         else:
             perm_index = entropy.argmin(dim=-1)
         perm = self.possible_perms[perm_index]
@@ -510,7 +523,7 @@ class MinEntropySelector(PermSelector):
         shape = d_shape[:len(d_shape)-self.hmm.observation_dist.event_dim]
         max_t = shape[-1]
         perms = torch.zeros(shape + (len(self.initial_logits),), dtype=int)
-        self.start(shape, save_history=save_history)
+        self.reset()
         for i in range(max_t):
             perms[..., i, :] = self.perm(
                 data[(..., i) + (slice(None),)*self.hmm.observation_dist.event_dim],
@@ -523,5 +536,3 @@ class MinEntropySelector(PermSelector):
             )
         else:
             return perms
-
-

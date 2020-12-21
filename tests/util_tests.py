@@ -1,6 +1,6 @@
 import unittest
 import torch
-from bayes_perm_hmm import util
+from perm_hmm import util
 
 
 class MyTestCase(unittest.TestCase):
