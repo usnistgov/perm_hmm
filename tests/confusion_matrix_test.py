@@ -1,7 +1,7 @@
 import unittest
 import torch
 import torch.distributions as dist
-from perm_hmm.postprocessing import EmpiricalPostprocessor, ExactPostprocessor
+from perm_hmm.simulations.postprocessing import EmpiricalPostprocessor, ExactPostprocessor
 
 
 class MyTestCase(unittest.TestCase):

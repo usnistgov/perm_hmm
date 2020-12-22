@@ -229,24 +229,3 @@ class HMMOutPostDist(NamedTuple):
     """
 
 
-class EmpiricalRun(NamedTuple):
-    """
-    The data returned by a run of the empirical misclassification experiment.
-
-    .. seealso:: the return type of
-        :py:meth:`BernoulliSimulator._single_sampled_simulation`,
-        used in :py:class:`EmpiricalResults`
-    """
-    naive: HMMOutPostDist
-    """:py:class:`HMMOutPostDist`
-    The data and posterior initial state distribution
-    returned in the empirical misclassifcation rate experiment by the
-    HMM without permutations.
-    """
-    bayes: MinEntHMMOutput
-    """:py:class:`perm_hmm.min_entropy_hmm.MinEntHMMOutput`
-    The data returned in the empirical misclassifcation rate experiment by the
-    HMM with permutations.
-    """
-
-

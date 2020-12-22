@@ -326,11 +326,6 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
         tmats = \
             self.transition_logits.expand(
                 flat_shape + self.transition_logits.shape[-2:]).exp()
-        self.prior_log_current.logits = \
-            self.prior_log_current.logits.expand(total_batches, -1, -1)
-        self.prior_log_cur_cond_init.logits = \
-            self.prior_log_cur_cond_init.logits.expand(
-                total_batches, -1, -1, -1)
         b = self.observation_dist.batch_shape
         b_shape = broadcast_shape(shape[:-1], b[:-1])
         k = self.observation_dist._param.shape
@@ -374,12 +369,10 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
                         flat_params[batch, states[batch, t]]
                     ),
                 )
-            perm = perm_selector.perm(observations[batch, -1], event_dims=self.observation_dist.event_dim).reshape(total_batches, len(self.initial_logits))
+            shaped_o = observations[batch, -1].reshape(shape[:-1] + self.observation_dist.event_shape)
+            perm = perm_selector.perm(shaped_o, event_dims=self.observation_dist.event_dim).reshape(total_batches, len(self.initial_logits))
         states = states.reshape(shape)
         observations = observations.reshape(shape + self.observation_dist.event_shape)
-        if (self.event_shape[0] == 1) and (sample_shape == ()):
-            states.squeeze_(0)
-            observations.squeeze_(0)
         return HMMOutput(
             states,
             observations,

@@ -3,7 +3,7 @@ import torch
 import numpy as np
 import pyro.distributions as dist
 from pyro.distributions import DiscreteHMM
-from perm_hmm.hmms import SampleableDiscreteHMM, PermutedDiscreteHMM
+from perm_hmm.models.hmms import SampleableDiscreteHMM, PermutedDiscreteHMM
 from perm_hmm.util import ZERO, num_to_data
 
 

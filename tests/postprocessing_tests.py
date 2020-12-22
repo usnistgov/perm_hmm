@@ -2,11 +2,11 @@ import unittest
 import torch
 import torch.distributions
 import pyro.distributions as dist
-import perm_hmm.hmms
-from perm_hmm.hmms import SampleableDiscreteHMM, PermutedDiscreteHMM
+import perm_hmm.models.hmms
+from perm_hmm.models.hmms import SampleableDiscreteHMM, PermutedDiscreteHMM
 from perm_hmm.classifiers.interrupted import InterruptedClassifier
-from perm_hmm.interrupted_training import train, exact_train
-import perm_hmm.postprocessing as pp
+from perm_hmm.training.interrupted_training import train_ic, exact_train_ic
+import perm_hmm.simulations.postprocessing as pp
 from perm_hmm.util import transpositions, num_to_data
 
 class MyTestCase(unittest.TestCase):
@@ -69,7 +69,7 @@ class MyTestCase(unittest.TestCase):
         while ((ground_truth.unsqueeze(-1) == testing_states).sum(-2) == 0).any():
             train_x, train_y = self.shmm.sample((num_samples, max_t))
             ground_truth = train_x[..., 0]
-        _ = train(ic, train_y, train_x[..., 0], self.shmm.initial_logits.shape[-1])
+        _ = train_ic(ic, train_y, train_x[..., 0], self.shmm.initial_logits.shape[-1])
         ic_results = ic.classify(y)
         ip = pp.InterruptedEmpiricalPostprocessor(
             ground_truth,
@@ -105,7 +105,7 @@ class MyTestCase(unittest.TestCase):
         mr = bp.misclassification_rates()
         print(mr)
         self.assertTrue(mr.confusions.sum(-1)[self.testing_states].allclose(torch.tensor(1.)))
-        _ = exact_train(ic, all_data, naive_lp, all_naive_post, self.initial_logits)
+        _ = exact_train_ic(ic, all_data, naive_lp, all_naive_post, self.initial_logits)
         ic_results = ic.classify(all_data)
         ip = pp.InterruptedExactPostprocessor(
             naive_lp,
@@ -121,7 +121,7 @@ class MyTestCase(unittest.TestCase):
     def test_post_dist_emprirical_singleton(self):
         n = 5
         testing_states = torch.tensor([0, 1])
-        hmm = perm_hmm.hmms.random_phmm(n)
+        hmm = perm_hmm.models.hmms.random_phmm(n)
         x = hmm.sample_min_entropy((100,), save_history=False)
         plisd = hmm.posterior_log_initial_state_dist(x.observations, x.perm)
         ep = pp.PostDistEmpiricalPostprocessor(x.states, testing_states, n, plisd)

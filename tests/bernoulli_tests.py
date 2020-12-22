@@ -2,8 +2,8 @@ import unittest
 import torch
 import pyro.distributions as dist
 from perm_hmm.classifiers.interrupted import InterruptedClassifier
-from perm_hmm.hmms import SampleableDiscreteHMM, PermutedDiscreteHMM
-from perm_hmm.simulator import Simulator
+from perm_hmm.models.hmms import SampleableDiscreteHMM, PermutedDiscreteHMM
+from perm_hmm.simulations.simulator import Simulator
 from perm_hmm.util import transpositions
 
 

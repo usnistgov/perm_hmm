@@ -1,10 +1,9 @@
 import unittest
-import sys
 from copy import deepcopy
 import torch
 import pyro.distributions as dist
 import pyro
-from perm_hmm.hmms import SampleableDiscreteHMM, PermutedDiscreteHMM
+from perm_hmm.models.hmms import SampleableDiscreteHMM, PermutedDiscreteHMM
 from perm_hmm.util import bin_ent, ZERO
 
 

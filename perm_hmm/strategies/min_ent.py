@@ -11,16 +11,10 @@ All distributions are in log space.
 from operator import mul
 from functools import reduce
 import torch
-import pyro
-import pyro.distributions as dist
-from pyro.distributions import DiscreteHMM
-from pyro.distributions.hmm import _logmatmulexp
 from pyro.distributions.util import broadcast_shape
-from perm_hmm.hmms import SampleableDiscreteHMM, random_hmm
-from perm_hmm.return_types import HMMOutput, PostYPostS0, GenDistEntropy, \
-    PermWithHistory, PHMMOutHistory, PermHMMOutput
-from perm_hmm.util import ZERO, wrap_index, id_and_transpositions
-import copy
+from pyro.distributions.hmm import _logmatmulexp
+from perm_hmm.return_types import PostYPostS0, GenDistEntropy
+from perm_hmm.util import ZERO, wrap_index
 from perm_hmm.strategies.selector import PermSelector
 
 
@@ -316,9 +310,9 @@ class MinEntropySelector(PermSelector):
         self.shape = None
         self._perm_history = []
         self.save_history = save_history
-        self._history = {
-            "dist_array": [],
-            "entropy_array": [],
+        self._calc_history = {
+            b"dist_array": [],
+            b"entropy_array": [],
         }
 
     def update_prior(self, val):
@@ -339,15 +333,18 @@ class MinEntropySelector(PermSelector):
         if len(self._perm_history) == 0:
             n_states = len(self.hmm.initial_logits)
             shape = val.shape
-            # shape = shape[:len(shape) - self.hmm.observation_dist.event_dim]
-            # total_batches = reduce(mul, shape, 1)
+            total_batches = shape[0]
+            self.prior_log_current.logits = \
+                self.prior_log_current.logits.expand(total_batches, -1, -1)
+            self.prior_log_cur_cond_init.logits = \
+                self.prior_log_cur_cond_init.logits.expand(
+                    total_batches, -1, -1, -1)
             identity_perm = torch.arange(n_states, dtype=int)
-            # identity_perm = identity_perm.expand((total_batches,) + (n_states,))
             identity_perm = identity_perm.expand((shape[0],) + (n_states,))
-            self._perm_history.append(identity_perm)
-            # self.shape = shape
-        # val = val.reshape((reduce(mul, self.shape, 1),) + self.hmm.observation_dist.event_shape)
-        prev_perm_index = self.to_perm_index(self._perm_history[-1])
+            # self._perm_history.append(identity_perm)
+            prev_perm_index = self.to_perm_index(identity_perm)
+        else:
+            prev_perm_index = self.to_perm_index(self._perm_history[-1])
         transition_logits = self.hmm.transition_logits[self.possible_perms]
         observation_logits = \
             self.hmm.observation_dist.log_prob(
@@ -446,17 +443,7 @@ class MinEntropySelector(PermSelector):
     @PermSelector.manage_calc_history
     def perm(self, data, event_dims=0):
         self.update_prior(data)
-        # if self.save_history:
-        #     self._history["dist_array"].append(self.prior_log_inits.logits)
-        # total_batches = data.shape[0]
-        # n_perms = self.possible_perms.shape[0]
-        # entropy = self.expected_entropy().expand(total_batches, n_perms)
         entropy = self.expected_entropy()
-        # if self.save_history:
         entropy_array, perm_index = entropy.min(dim=-1)
-        self._history["entropy_array"].append(entropy_array)
-        # else:
-        #     perm_index = entropy.argmin(dim=-1)
         perm = self.possible_perms[perm_index]
-        # self._perm_history.append(perm)
-        return perm, {"dist_array": self.prior_log_inits.logits, "entropy_array": entropy_array}
+        return perm, {b"dist_array": self.prior_log_inits.logits, b"entropy_array": entropy_array}

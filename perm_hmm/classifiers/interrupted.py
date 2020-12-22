@@ -34,35 +34,32 @@ class InterruptedClassifier(Classifier):
         \hat{s} = \mathcal{S}(\argmax{i} r_i(y^t))
     """
 
-    def __init__(self, dist, testing_states, ratio=None):
-        # TODO: Fix this class and its trainer.
+    def __init__(self, dist, ratio):
         self.dist = dist
-        self.testing_states = testing_states
         self.ratio = ratio
 
-    def classify(self, data, ratio=None):
-        if ratio is None:
-            if self.ratio is None:
-                raise ValueError("Must train before classifying.")
-            ratio = self.ratio
+    def classify(self, data, testing_states, verbosity=0):
         shape = data.shape
         if shape == ():
             data = data.expand(1, 1)
         elif len(shape) == 1:
             data = data.expand(1, -1)
         data = data.float()
-        intermediate_lps = self.dist.log_prob(data.unsqueeze(-1))[..., self.testing_states].cumsum(dim=-2).float()
+        intermediate_lps = self.dist.log_prob(data.unsqueeze(-1))[..., testing_states].cumsum(dim=-2).float()
         sort_lps, sort_inds = torch.sort(intermediate_lps, -1)
         sort_lrs = sort_lps[..., -1] - sort_lps[..., -2]
-        breaks = sort_lrs.view((1,)*len(ratio.shape) + sort_lrs.shape) > ratio.view(ratio.shape + (1,)*len(sort_lrs.shape))
+        breaks = sort_lrs.view((1,)*len(self.ratio.shape) + sort_lrs.shape) > self.ratio.view(self.ratio.shape + (1,)*len(sort_lrs.shape))
         first_breaks = first_nonzero(breaks, -1)
         ix = indices(first_breaks.shape)
         _, sort_inds = torch.broadcast_tensors(breaks.unsqueeze(-1), sort_inds)
         classifications = sort_inds[..., -1, -1]
         classifications[first_breaks >= 0] = sort_inds[ix + (first_breaks, torch.zeros_like(first_breaks, dtype=int))][first_breaks >= 0]
-        classifications = self.testing_states[classifications]
-        return ClassBreakRatio(
-            classifications,
-            breaks.any(-1),
-            sort_lrs[..., -1],
-        )
+        classifications = testing_states[classifications]
+        if not verbosity:
+            return classifications
+        else:
+            return ClassBreakRatio(
+                classifications,
+                breaks.any(-1),
+                sort_lrs[..., -1],
+            )

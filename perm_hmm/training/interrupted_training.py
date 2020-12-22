@@ -1,10 +1,10 @@
 import torch
 import perm_hmm.classifiers.interrupted
-import perm_hmm.postprocessing
+import perm_hmm.simulations.postprocessing
 
 
-def exact_train(ic, all_data, log_probs, log_post_dist, log_prior_dist,
-                num_ratios=20):
+def exact_train_ic(ic, testing_states, all_data, log_probs, log_post_dist, log_prior_dist,
+                   num_ratios=20):
     """
     Train the interrupted classifier using the exact chances of the data occurring.
 
@@ -18,26 +18,29 @@ def exact_train(ic, all_data, log_probs, log_post_dist, log_prior_dist,
     :param num_ratios: number of points to perform the brute force search on.
     :return: A tuple containing the minimum misclassification rate over the searched domain and the corresponding threshold log ratio.
     """
-    testing_states = ic.testing_states
     spaced_ratios = torch.arange(num_ratios, dtype=torch.float)
-    interrupted_results = ic.classify(
-        all_data,
-        spaced_ratios,
-    )
-    iep = perm_hmm.postprocessing.InterruptedExactPostprocessor(
-        log_probs,
-        log_post_dist,
-        log_prior_dist,
-        testing_states,
-        interrupted_results,
-    )
-    rates = iep.misclassification_rates()
-    min_rate = rates.average.min(-1)
+    misclass_rates = torch.zeros(num_ratios, dtype=torch.float)
+    for j in range(num_ratios):
+        ic.ratio = spaced_ratios[j]
+        interrupted_results = ic.classify(
+            all_data,
+            testing_states,
+        )
+        iep = perm_hmm.simulations.postprocessing.InterruptedExactPostprocessor(
+            log_probs,
+            log_post_dist,
+            log_prior_dist,
+            testing_states,
+            interrupted_results,
+        )
+        rates = iep.misclassification_rates()
+        misclass_rates[j] = rates.average
+    min_rate = misclass_rates.average.min(-1)
     ic.ratio = spaced_ratios[min_rate.indices]
-    return min_rate.values, ic.ratio
+    return min_rate.values
 
 
-def train(ic, training_data, ground_truth, total_num_states, num_ratios=20):
+def train_ic(ic, testing_states, training_data, ground_truth, total_num_states, num_ratios=20):
     """
     :param bayes_perm_hmm.interrupted.InterruptedClassifier ic: the InterruptedClassifier to train.
     :param training_data: data to train on
@@ -45,16 +48,23 @@ def train(ic, training_data, ground_truth, total_num_states, num_ratios=20):
     :param num_ratios: The number of points to perform the brute force search on.
     :return: A tuple containing the minimum average misclassification rate and its corresponding threshold log ratio.
     """
-    testing_states = ic.testing_states
     spaced_ratios = torch.arange(num_ratios, dtype=torch.float)
+    misclass_rates = torch.zeros(num_ratios, dtype=torch.float)
     interrupted_results = ic.classify(training_data, spaced_ratios)
-    iep = perm_hmm.postprocessing.InterruptedEmpiricalPostprocessor(
-        ground_truth,
-        testing_states,
-        total_num_states,
-        *interrupted_results,
-    )
-    rates_and_intervals = iep.misclassification_rates()
-    min_rate = rates_and_intervals.average.rate.min(-1)
+    for j in range(num_ratios):
+        ic.ratio = spaced_ratios[j]
+        interrupted_results = ic.classify(
+            training_data,
+            testing_states,
+        )
+        iep = perm_hmm.simulations.postprocessing.InterruptedEmpiricalPostprocessor(
+            ground_truth,
+            testing_states,
+            total_num_states,
+            *interrupted_results,
+        )
+        rates = iep.misclassification_rates()
+        misclass_rates[j] = rates.average
+    min_rate = misclass_rates.average.min(-1)
     ic.ratio = spaced_ratios[min_rate.indices]
-    return min_rate.values, ic.ratio
+    return min_rate.values

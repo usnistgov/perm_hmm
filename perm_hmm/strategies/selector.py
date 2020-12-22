@@ -30,15 +30,66 @@ class PermSelector(object):
         self.shape = None
         self.save_history = save_history
 
+    @classmethod
+    def manage_shape(cls, perm):
+        @wraps(perm)
+        def _wrapper(self, *args, **kwargs):
+            event_dims = kwargs.get("event_dims", 0)
+            try:
+                data_shape = args[0].shape
+                shape = data_shape[:len(data_shape) - event_dims]
+            except (AttributeError, IndexError):
+                shape = None
+            self_shape = getattr(self, "shape", None)
+            if self_shape is None:
+                if shape is not None:
+                    self.shape = shape
+            data = args[0]
+            if shape is not None:
+                data = data.reshape((reduce(mul, self.shape, 1),) + data_shape[len(data_shape) - event_dims:])
+            perms = perm(self, data, *args[1:], **kwargs)
+            if shape is not None:
+                perms.reshape(shape + perms.shape[-1:])
+            return perms
+        return _wrapper
+
+    @classmethod
+    def manage_calc_history(cls, perm):
+        @wraps(perm)
+        def _wrapper(self, *args, **kwargs):
+            save_history = getattr(self, "save_history", False)
+            retval = perm(self, *args, **kwargs)
+            perms, calc_history = retval
+            if save_history:
+                for k, v in calc_history.items():
+                    try:
+                        self._calc_history[k].append(v)
+                    except KeyError:
+                        self._calc_history[k] = [v]
+            return perms
+        return _wrapper
+
+    @classmethod
+    def manage_perm_history(cls, perm):
+        @wraps(perm)
+        def _wrapper(self, *args, **kwargs):
+            perms = perm(self, *args, **kwargs)
+            self._perm_history.append(perms)
+            return perms
+        return _wrapper
+
     @property
     def perm_history(self):
         if len(self._perm_history) == 0:
             return torch.Tensor()
         else:
             try:
-                return torch.stack(self._perm_history)
+                toret = torch.stack(self._perm_history, dim=-2)
             except RuntimeError:
                 return self._perm_history
+            if len(self.shape) == 0:
+                toret.squeeze_(0)
+            return toret
 
     @perm_history.setter
     def perm_history(self, val):
@@ -57,7 +108,7 @@ class PermSelector(object):
         if self.shape is None:
             return self._calc_history
         try:
-            return {k: torch.stack([x.reshape(self.shape) for x in v]) for k, v in self._calc_history.items()}
+            return {k: torch.stack([x.reshape(self.shape + x.shape[1:]) for x in v], dim=-v[0].ndim) for k, v in self._calc_history.items()}
         except RuntimeError:
             return self._calc_history
 
@@ -124,10 +175,10 @@ class PermSelector(object):
         """
         d_shape = data.shape
         m = len(d_shape)
-        if time_dim <= 0:
-            obs_event_dim = -time_dim
+        if time_dim < 0:
+            obs_event_dim = -(time_dim + 1)
         else:
-            obs_event_dim = m - time_dim
+            obs_event_dim = m - (time_dim + 1)
         shape = d_shape[:m - obs_event_dim]
         max_t = shape[-1]
         perms = []
@@ -139,51 +190,3 @@ class PermSelector(object):
             ))
         perms = torch.stack(perms, -2)
         return perms
-
-    @classmethod
-    def manage_shape(cls, perm):
-        @wraps(perm)
-        def _wrapper(self, *args, **kwargs):
-            event_dims = kwargs.get("event_dims", 0)
-            try:
-                data_shape = args[0].shape
-                shape = data_shape[:len(data_shape) - event_dims]
-            except (AttributeError, IndexError):
-                shape = None
-            self_shape = getattr(self, "shape", None)
-            if self_shape is None:
-                if shape is not None:
-                    self.shape = shape
-            data = args[0]
-            if shape is not None:
-                data = data.reshape((reduce(mul, self.shape, 1),) + data_shape[:len(data_shape) - event_dims])
-            perms = perm(self, data, *args[1:], **kwargs)
-            if shape is not None:
-                perms.reshape(shape + perms.shape[-1:])
-            return perms
-        return _wrapper
-
-    @classmethod
-    def manage_calc_history(cls, perm):
-        @wraps(perm)
-        def _wrapper(self, *args, **kwargs):
-            save_history = getattr(self, "save_history", False)
-            retval = perm(self, *args, **kwargs)
-            perms, calc_history = retval
-            if save_history:
-                for k, v in calc_history.items():
-                    try:
-                        self._calc_history[k].append(v)
-                    except KeyError:
-                        self._calc_history[k] = [v]
-            return perms
-        return _wrapper
-
-    @classmethod
-    def manage_perm_history(cls, perm):
-        @wraps(perm)
-        def _wrapper(self, *args, **kwargs):
-            perms = perm(self, *args, **kwargs)
-            self._perm_history.append(perms)
-            return perms
-        return _wrapper

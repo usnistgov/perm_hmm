@@ -4,8 +4,8 @@ An example using the parameters from a Beryllium 9 system.
 import argparse
 import torch
 import pyro.distributions as dist
-from perm_hmm.hmms import PermutedDiscreteHMM
-from perm_hmm.simulator import Simulator
+from perm_hmm.models.hmms import PermutedDiscreteHMM
+from perm_hmm.simulations.simulator import Simulator
 from perm_hmm.physical_systems import beryllium
 
 

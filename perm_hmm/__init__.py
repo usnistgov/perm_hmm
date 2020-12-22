@@ -8,4 +8,4 @@ appreciable advantage.
 import perm_hmm.strategies
 import perm_hmm.strategies.min_ent
 import perm_hmm.util
-import perm_hmm.hmms
+import perm_hmm.models.hmms
