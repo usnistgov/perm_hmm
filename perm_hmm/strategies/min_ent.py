@@ -223,6 +223,7 @@ class BayesCurrentCondInitialDistribution(BayesDistribution):
 class MinEntropySelector(PermSelector):
 
     def __init__(self, possible_perms, hmm, calibrated=False, save_history=False):
+        # TODO: Fix this class to work with heterogeneous hmms
         super().__init__(possible_perms, save_history=save_history)
         self.hmm = hmm
         self.calibrated = calibrated
@@ -239,6 +240,7 @@ class MinEntropySelector(PermSelector):
         self.prior_log_inits = None
         self.prior_log_cur_cond_init = None
         self.prior_log_current = None
+        self.time_step = 0
         if self.calibrated:
             n_perms = len(possible_perms)
             self.prior_log_inits = \
@@ -294,6 +296,7 @@ class MinEntropySelector(PermSelector):
         """
         Resets the selector.
         """
+        super().reset(save_history=save_history)
         if not self.calibrated:
             raise ValueError("Model is not yet calibrated.")
         n_perms = len(self.possible_perms)
@@ -307,13 +310,14 @@ class MinEntropySelector(PermSelector):
             log_state_cond_initial_dist.logsumexp(axis=-1, keepdim=True)
         self.prior_log_cur_cond_init.logits = \
             log_state_cond_initial_dist.repeat(n_perms, 1, 1)
-        self.shape = None
-        self._perm_history = []
-        self.save_history = save_history
-        self._calc_history = {
-            b"dist_array": [],
-            b"entropy_array": [],
-        }
+        self.time_step = 0
+        # self.shape = None
+        # self._perm_history = []
+        # self.save_history = save_history
+        # self._calc_history = {
+        #     b"dist_array": [],
+        #     b"entropy_array": [],
+        # }
 
     def update_prior(self, val):
         """
@@ -330,26 +334,30 @@ class MinEntropySelector(PermSelector):
 
             shape ``batch_shape + (state_dim,)``
         """
+        n_states = len(self.hmm.initial_logits)
+        shape = val.shape
         if len(self._perm_history) == 0:
-            n_states = len(self.hmm.initial_logits)
-            shape = val.shape
             total_batches = shape[0]
             self.prior_log_current.logits = \
                 self.prior_log_current.logits.expand(total_batches, -1, -1)
             self.prior_log_cur_cond_init.logits = \
                 self.prior_log_cur_cond_init.logits.expand(
                     total_batches, -1, -1, -1)
-            identity_perm = torch.arange(n_states, dtype=int)
-            identity_perm = identity_perm.expand((shape[0],) + (n_states,))
-            # self._perm_history.append(identity_perm)
-            prev_perm_index = self.to_perm_index(identity_perm)
+            prev_perm = torch.arange(n_states, dtype=int)
         else:
-            prev_perm_index = self.to_perm_index(self._perm_history[-1])
+            prev_perm = self._perm_history[-1]
+        prev_perm = prev_perm.expand((shape[0],) + (n_states,))
+        prev_perm_index = self.to_perm_index(prev_perm)
         transition_logits = self.hmm.transition_logits[self.possible_perms]
-        observation_logits = \
-            self.hmm.observation_dist.log_prob(
-                val.unsqueeze(-1)
-            ).float().unsqueeze(-2).unsqueeze(-2)
+        if len(self.hmm.observation_dist.batch_shape) >= 2:
+            observation_logits = self.hmm.observation_dist.log_prob(
+                val.unsqueeze(-1).unsqueeze(-1)
+            )[..., self.time_step, :].unsqueeze(-2).unsqueeze(-2)
+        else:
+            observation_logits = \
+                self.hmm.observation_dist.log_prob(
+                    val.unsqueeze(-1)
+                ).unsqueeze(-2).unsqueeze(-2)
         prior_s_cond_init = self.prior_log_cur_cond_init.logits
         post_log_initial_dist = \
             self.prior_log_inits.posterior(
@@ -441,9 +449,25 @@ class MinEntropySelector(PermSelector):
     @PermSelector.manage_perm_history
     @PermSelector.manage_shape
     @PermSelector.manage_calc_history
-    def perm(self, data, event_dims=0):
+    def get_perm(self, data, event_dims=0):
         self.update_prior(data)
         entropy = self.expected_entropy()
         entropy_array, perm_index = entropy.min(dim=-1)
         perm = self.possible_perms[perm_index]
+        self.time_step += 1
         return perm, {b"dist_array": self.prior_log_inits.logits, b"entropy_array": entropy_array}
+
+    def _calculate_dists(self, data, perms):
+        shape = perms.shape[:-1]
+        if not data.shape[:len(shape)] == shape:
+            raise ValueError("Data and permutations must have same shape")
+        try:
+            _ = self.hmm.log_prob(data)
+        except (ValueError, RuntimeError) as e:
+            raise ValueError("Data does not have a compatible shape") from e
+        lperms = [torch.tensor(x) for x in perms.tolist()]
+        self.reset(save_history=True)
+        for i in range(shape[-1]):
+            perm = self.get_perm(data[(..., i) + (slice(None),)*(len(data.shape)-len(shape))])
+            self._perm_history = lperms[:i]
+        return self.calc_history[b"dist_array"]

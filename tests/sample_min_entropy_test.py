@@ -24,6 +24,12 @@ class MyTestCase(unittest.TestCase):
         self.bdhmm = PermutedDiscreteHMM(self.initial_logits,
                                          self.transition_logits,
                                          self.observation_dist)
+        self.deep_hmm = PermutedDiscreteHMM(
+            self.initial_logits,
+            self.transition_logits,
+            dist.Bernoulli(torch.rand(2, 2))
+        )
+        self.deep_perm_selector = MinEntropySelector(self.possible_perms, self.deep_hmm, calibrated=True, save_history=True)
         self.perm_selector = MinEntropySelector(self.possible_perms, self.bdhmm, calibrated=True, save_history=True)
 
     def test_sample_minent(self):
@@ -38,7 +44,8 @@ class MyTestCase(unittest.TestCase):
         self.assertTrue(dist_array.shape == (10, 7, 2))
         self.assertTrue(entropy_array.shape == (10, 7))
 
-        b_perm_array = self.perm_selector.get_perms(y, -1, save_history=True)
+        self.perm_selector.reset(save_history=True)
+        b_perm_array = self.perm_selector.get_perms(y, -1)
         b_hist = self.perm_selector.calc_history
         b_dist_array = b_hist[b"dist_array"]
         b_entropy_array = b_hist[b"entropy_array"]
@@ -46,26 +53,48 @@ class MyTestCase(unittest.TestCase):
         self.assertTrue(torch.all(b_perm_array == perm_array))
         self.assertTrue(b_entropy_array.allclose(entropy_array, atol=1e-7))
 
-
     def test_shapes(self):
         shapes = [(10, 7), (), (1,), (10, 1), (1, 1), (10,)]
+        # shallow = [(self.perm_selector, self.bdhmm), (self.deep_perm_selector, self.deep_hmm)]
+        shallow = [(self.perm_selector, self.bdhmm)]
         for shape in shapes:
-            with self.subTest(shape=shape):
-                self.perm_selector.reset(save_history=True)
-                x, y = self.bdhmm.sample(shape, self.perm_selector)
-                print("input shape", shape)
-                print("perm_selector shape", self.perm_selector.shape)
-                perm_array = self.perm_selector.perm_history
-                hist = self.perm_selector.calc_history
-                dist_array = hist[b"dist_array"]
-                entropy_array = hist[b"entropy_array"]
-                if shape == ():
-                    shape = (1,)
-                self.assertTrue(x.shape == shape)
-                self.assertTrue(y.shape == shape)
-                self.assertTrue(perm_array.shape == shape + (2,))
-                self.assertTrue(dist_array.shape == shape + (2,))
-                self.assertTrue(entropy_array.shape == shape)
+            for typ in shallow:
+                ps, hmm = typ
+                with self.subTest(shape=shape, hmm=hmm):
+                    x, y = hmm.sample(shape)
+                    t_shape = shape
+                    if hmm == self.deep_hmm:
+                        t_shape = t_shape + self.deep_hmm.observation_dist.batch_shape[:-1]
+                    else:
+                        if t_shape == ():
+                            t_shape = (1,)
+                    self.assertTrue(x.shape == t_shape)
+                    self.assertTrue(
+                        y.shape == t_shape + hmm.observation_dist.event_shape)
+                with self.subTest(shape=shape, ps=ps, hmm=hmm):
+                    ps.reset(save_history=True)
+                    x, y = hmm.sample(shape, ps)
+                    print("input shape", shape)
+                    print("ps shape", ps.shape)
+                    perm_array = ps.perm_history
+                    hist = ps.calc_history
+                    dist_array = hist[b"dist_array"]
+                    entropy_array = hist[b"entropy_array"]
+                    t_shape = shape
+                    s_shape = shape
+                    if hmm == self.deep_hmm:
+                        t_shape = t_shape + self.deep_hmm.observation_dist.batch_shape[:-1]
+                        s_shape = s_shape + self.deep_hmm.observation_dist.batch_shape[:-1]
+                    else:
+                        if t_shape == ():
+                            t_shape = (1,)
+                            s_shape = ()
+                    self.assertTrue(x.shape == t_shape)
+                    self.assertTrue(y.shape == t_shape + hmm.observation_dist.event_shape)
+                    self.assertTrue(perm_array.shape == t_shape + (2,))
+                    self.assertTrue(dist_array.shape == t_shape + (2,))
+                    self.assertTrue(entropy_array.shape == t_shape)
+
 
 if __name__ == '__main__':
     unittest.main()

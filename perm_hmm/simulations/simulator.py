@@ -8,6 +8,7 @@ import torch
 
 from perm_hmm.util import num_to_data
 from perm_hmm.simulations.postprocessing import ExactPostprocessor, EmpiricalPostprocessor
+from perm_hmm.classifiers.perm_classifier import PermClassifier
 
 class HMMSimulator(object):
 
@@ -77,9 +78,11 @@ class HMMSimulator(object):
             save_history = True
         else:
             save_history = False
+        if classifier is None:
+            classifier = PermClassifier(self.phmm)
         if perm_selector is not None:
             perm_selector.reset(save_history=save_history)
-            perms = perm_selector.get_perms(data, save_history=save_history)
+            perms = perm_selector.get_perms(data, -1)
             if save_history:
                 history = perm_selector.history
             classi_dict = classifier.classify(data, testing_states, perms=perms, verbosity=verbosity)
@@ -98,7 +101,7 @@ class HMMSimulator(object):
             lp,
             dist,
             self.phmm.initial_logits,
-            self.testing_states,
+            testing_states,
             classifications,
         )
         if verbosity:
@@ -121,10 +124,12 @@ class HMMSimulator(object):
         if save_history and (perm_selector is not None):
             history = perm_selector.history
         data = output.observations
-        if perms:
-            classi_dict = classifier(data, perms, verbosity=verbosity)
+        if classifier is None:
+            classifier = PermClassifier(self.phmm)
+        if perms is not None:
+            classi_dict = classifier.classify(data, testing_states, perms, verbosity=verbosity)
         else:
-            classi_dict = classifier(data, verbosity=verbosity)
+            classi_dict = classifier.classify(data, testing_states, verbosity=verbosity)
         if verbosity:
             classifications = classi_dict[b"classifications"]
             classi_dict[b"data"] = data
@@ -133,8 +138,8 @@ class HMMSimulator(object):
         else:
             classifications = classi_dict
         ep = EmpiricalPostprocessor(
-            output.states,
-            self.testing_states,
+            output.states[..., 0],
+            testing_states,
             len(self.phmm.initial_logits),
             classifications,
         )

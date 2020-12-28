@@ -3,7 +3,8 @@ import torch
 import numpy as np
 import pyro.distributions as dist
 from pyro.distributions import DiscreteHMM
-from perm_hmm.models.hmms import SampleableDiscreteHMM, PermutedDiscreteHMM
+from perm_hmm.models.hmms import DiscreteHMM as MyDiscreteHMM
+from perm_hmm.models.hmms import PermutedDiscreteHMM
 from perm_hmm.util import ZERO, num_to_data
 
 
@@ -17,7 +18,7 @@ def to_base(x, y, max_length=None):
     return list(reversed(ret))
 
 
-def joint_lp(states, observations, hmm: SampleableDiscreteHMM):
+def joint_lp(states, observations, hmm: MyDiscreteHMM):
     return hmm.initial_logits[states[..., 0]] + hmm.transition_logits[states[..., :-1], states[..., 1:]].sum(-1) + \
         type(hmm.observation_dist)(hmm.observation_dist._param[states]).log_prob(observations).sum(-1)
 
@@ -34,20 +35,19 @@ class MyTestCase(unittest.TestCase):
         self.num_perms = len(self.possible_perms)
         self.transition_logits = torch.tensor([[1-ZERO, ZERO], [.5, .5]]).log().float()
         self.initial_logits = torch.tensor([.5, .5]).log()
-        self.shmm = SampleableDiscreteHMM(self.initial_logits,
+        self.shmm = MyDiscreteHMM(self.initial_logits,
                                           self.transition_logits,
                                           self.observation_dist)
         self.normal_shmm = DiscreteHMM(self.initial_logits, self.transition_logits, self.observation_dist)
         self.bhmm = PermutedDiscreteHMM(self.initial_logits,
                                         self.transition_logits,
-                                        self.observation_dist,
-                                        self.possible_perms)
+                                        self.observation_dist)
         self.data = torch.tensor([1.0, 1, 0])
         self.data_2 = torch.tensor([1.0, 1, 1])
         self.data_3 = torch.tensor([0.0, 1, 1])
         self.aye = (torch.eye(2) + ZERO).log()
         self.aye -= self.aye.logsumexp(-1, keepdim=True)
-        self.hmm = SampleableDiscreteHMM(self.initial_logits, self.aye,
+        self.hmm = MyDiscreteHMM(self.initial_logits, self.aye,
                                          self.observation_dist)
         self.normal_hmm = DiscreteHMM(self.initial_logits, self.transition_logits, self.observation_dist)
 
@@ -67,9 +67,9 @@ class MyTestCase(unittest.TestCase):
             [ZERO, ZERO, ZERO, ZERO, 1-ZERO],
         ]).log()
         lm -= lm.logsumexp(-1, keepdims=True)
-        hmm = SampleableDiscreteHMM(il, lm, p)
+        hmm = MyDiscreteHMM(il, lm, p)
         samp = hmm.sample()
-        self.assertTrue(samp.observations.shape == ())
+        self.assertTrue(samp.observations.shape == (1,))
         samp = hmm.sample((1,))
         self.assertTrue(samp.observations.shape == (1,))
         samp = hmm.sample((3,))
@@ -88,7 +88,7 @@ class MyTestCase(unittest.TestCase):
         ]).log()
         lm0 -= lm0.logsumexp(-1, keepdims=True)
         tlm = torch.stack([torch.roll(lm0, (i, i), (0, 1)) for i in range(4)])
-        hmm2 = SampleableDiscreteHMM(il, tlm, p)
+        hmm2 = MyDiscreteHMM(il, tlm, p)
 
         samp = hmm2.sample()
         self.assertTrue(samp.observations.shape == (4,))
@@ -109,7 +109,7 @@ class MyTestCase(unittest.TestCase):
         lm = m.log()
         b = dist.Bernoulli(torch.rand(num_states))
         il = dist.Dirichlet(torch.ones(num_states)/num_states).sample()
-        hmm = SampleableDiscreteHMM(il, lm, b)
+        hmm = MyDiscreteHMM(il, lm, b)
         for i in range(1, 10):
             all_data = torch.tensor([list(map(int, ("{{0:0{}b}}".format(i)).format(j))) for j in range(2 ** i)], dtype=torch.float)
             hlp = hmm.log_prob(all_data)
@@ -122,7 +122,7 @@ class MyTestCase(unittest.TestCase):
         bern = dist.Bernoulli(torch.rand((st,)))
         il = dir.sample().log()
         tl = dir.sample((st,)).log()
-        hmm = SampleableDiscreteHMM(il, tl, bern)
+        hmm = MyDiscreteHMM(il, tl, bern)
 
         all_states = torch.stack(
             [torch.tensor(to_base(x, st, tm)) for x in range(st ** tm)])

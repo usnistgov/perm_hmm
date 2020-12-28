@@ -54,7 +54,7 @@ def num_to_data(num, num_bins, base=2):
     """
     x = np.base_repr(num, base)
     return torch.tensor(
-        list(map(int, '0'*(num_bins - len(x)) + x))
+        list(map(int, '0'*(num_bins - len(x)) + x)), dtype=torch.float
     )
 
 

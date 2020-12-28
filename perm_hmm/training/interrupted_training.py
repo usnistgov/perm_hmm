@@ -1,6 +1,6 @@
 import torch
 import perm_hmm.classifiers.interrupted
-import perm_hmm.simulations.postprocessing
+from perm_hmm.simulations.interrupted_postprocessors import InterruptedEmpiricalPostprocessor, InterruptedExactPostprocessor
 
 
 def exact_train_ic(ic, testing_states, all_data, log_probs, log_post_dist, log_prior_dist,
@@ -25,8 +25,9 @@ def exact_train_ic(ic, testing_states, all_data, log_probs, log_post_dist, log_p
         interrupted_results = ic.classify(
             all_data,
             testing_states,
+            verbosity=True,
         )
-        iep = perm_hmm.simulations.postprocessing.InterruptedExactPostprocessor(
+        iep = InterruptedExactPostprocessor(
             log_probs,
             log_post_dist,
             log_prior_dist,
@@ -35,7 +36,7 @@ def exact_train_ic(ic, testing_states, all_data, log_probs, log_post_dist, log_p
         )
         rates = iep.misclassification_rates()
         misclass_rates[j] = rates.average
-    min_rate = misclass_rates.average.min(-1)
+    min_rate = misclass_rates.min(-1)
     ic.ratio = spaced_ratios[min_rate.indices]
     return min_rate.values
 
@@ -50,21 +51,21 @@ def train_ic(ic, testing_states, training_data, ground_truth, total_num_states, 
     """
     spaced_ratios = torch.arange(num_ratios, dtype=torch.float)
     misclass_rates = torch.zeros(num_ratios, dtype=torch.float)
-    interrupted_results = ic.classify(training_data, spaced_ratios)
+    interrupted_results = ic.classify(training_data, testing_states)
     for j in range(num_ratios):
         ic.ratio = spaced_ratios[j]
         interrupted_results = ic.classify(
             training_data,
             testing_states,
         )
-        iep = perm_hmm.simulations.postprocessing.InterruptedEmpiricalPostprocessor(
+        iep = InterruptedEmpiricalPostprocessor(
             ground_truth,
             testing_states,
             total_num_states,
-            *interrupted_results,
+            interrupted_results,
         )
         rates = iep.misclassification_rates()
-        misclass_rates[j] = rates.average
-    min_rate = misclass_rates.average.min(-1)
+        misclass_rates[j] = rates.average.rate
+    min_rate = misclass_rates.min(-1)
     ic.ratio = spaced_ratios[min_rate.indices]
     return min_rate.values

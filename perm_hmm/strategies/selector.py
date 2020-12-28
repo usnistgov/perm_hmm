@@ -31,8 +31,8 @@ class PermSelector(object):
         self.save_history = save_history
 
     @classmethod
-    def manage_shape(cls, perm):
-        @wraps(perm)
+    def manage_shape(cls, get_perm):
+        @wraps(get_perm)
         def _wrapper(self, *args, **kwargs):
             event_dims = kwargs.get("event_dims", 0)
             try:
@@ -41,41 +41,40 @@ class PermSelector(object):
             except (AttributeError, IndexError):
                 shape = None
             self_shape = getattr(self, "shape", None)
-            if self_shape is None:
-                if shape is not None:
-                    self.shape = shape
+            if (self_shape is None) and (shape is not None):
+                self.shape = shape
             data = args[0]
             if shape is not None:
                 data = data.reshape((reduce(mul, self.shape, 1),) + data_shape[len(data_shape) - event_dims:])
-            perms = perm(self, data, *args[1:], **kwargs)
+            perm = get_perm(self, data, *args[1:], **kwargs)
             if shape is not None:
-                perms.reshape(shape + perms.shape[-1:])
-            return perms
+                perm = perm.reshape(shape + perm.shape[-1:])
+            return perm
         return _wrapper
 
     @classmethod
-    def manage_calc_history(cls, perm):
-        @wraps(perm)
+    def manage_calc_history(cls, get_perm):
+        @wraps(get_perm)
         def _wrapper(self, *args, **kwargs):
             save_history = getattr(self, "save_history", False)
-            retval = perm(self, *args, **kwargs)
-            perms, calc_history = retval
+            retval = get_perm(self, *args, **kwargs)
+            perm, calc_history = retval
             if save_history:
                 for k, v in calc_history.items():
                     try:
                         self._calc_history[k].append(v)
                     except KeyError:
                         self._calc_history[k] = [v]
-            return perms
+            return perm
         return _wrapper
 
     @classmethod
-    def manage_perm_history(cls, perm):
-        @wraps(perm)
+    def manage_perm_history(cls, get_perm):
+        @wraps(get_perm)
         def _wrapper(self, *args, **kwargs):
-            perms = perm(self, *args, **kwargs)
-            self._perm_history.append(perms)
-            return perms
+            perm = get_perm(self, *args, **kwargs)
+            self._perm_history.append(perm)
+            return perm
         return _wrapper
 
     @property
@@ -87,8 +86,6 @@ class PermSelector(object):
                 toret = torch.stack(self._perm_history, dim=-2)
             except RuntimeError:
                 return self._perm_history
-            if len(self.shape) == 0:
-                toret.squeeze_(0)
             return toret
 
     @perm_history.setter
@@ -120,7 +117,7 @@ class PermSelector(object):
     def calc_history(self):
         del self._calc_history
 
-    def perm(self, data: torch.Tensor, shape=()):
+    def get_perm(self, data: torch.Tensor, shape=()):
         """
         Takes a (vectorized) input of data from a single time step,
         and returns a (correspondingly shaped) permutation.
@@ -137,9 +134,12 @@ class PermSelector(object):
         raise NotImplementedError
 
     def reset(self, save_history=False):
-        pass
+        self.shape = None
+        self._perm_history = []
+        self.save_history = save_history
+        self._calc_history = {}
 
-    def get_perms(self, data, time_dim, save_history=False):
+    def get_perms(self, data, time_dim):
         r"""
         Given a run of data, returns the posterior initial state distributions,
         the optimal permutations according to
@@ -182,9 +182,8 @@ class PermSelector(object):
         shape = d_shape[:m - obs_event_dim]
         max_t = shape[-1]
         perms = []
-        self.reset(save_history=save_history)
         for i in range(max_t):
-            perms.append(self.perm(
+            perms.append(self.get_perm(
                 data[(..., i) + (
                     slice(None),) * obs_event_dim],
             ))

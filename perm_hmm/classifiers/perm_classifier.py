@@ -9,5 +9,8 @@ class PermClassifier(MAPClassifier):
         self.model = model
 
     def classify(self, data, testing_states, perms=None, verbosity=0):
-        retval = MAPClassifier(self.model.expand_with_perm(perms)).classify(data, testing_states, verbosity)
+        if perms is None:
+            retval = super().classify(data, testing_states, verbosity=verbosity)
+        else:
+            retval = MAPClassifier(self.model.expand_with_perm(perms)).classify(data, testing_states, verbosity)
         return retval

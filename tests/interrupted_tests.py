@@ -2,10 +2,11 @@ import unittest
 import torch
 import pyro.distributions as dist
 from perm_hmm.classifiers.interrupted import InterruptedClassifier
-from perm_hmm.models.hmms import SampleableDiscreteHMM, PermutedDiscreteHMM
-from perm_hmm.simulations.postprocessing import InterruptedEmpiricalPostprocessor, InterruptedExactPostprocessor
+from perm_hmm.models.hmms import DiscreteHMM, PermutedDiscreteHMM
+from perm_hmm.simulations.interrupted_postprocessors import InterruptedEmpiricalPostprocessor, InterruptedExactPostprocessor
 import perm_hmm.training.interrupted_training
 from perm_hmm.util import transpositions, num_to_data
+from perm_hmm.strategies.min_ent import MinEntropySelector
 
 
 class MyTestCase(unittest.TestCase):
@@ -26,12 +27,13 @@ class MyTestCase(unittest.TestCase):
                 transpositions(self.num_states)
             )
 
-        self.hmm = SampleableDiscreteHMM(
+        self.hmm = DiscreteHMM(
             self.initial_logits,
             self.transition_logits,
             self.observation_dist,
         )
-        self.bhmm = PermutedDiscreteHMM.from_hmm(self.hmm, self.possible_perms)
+        self.bhmm = PermutedDiscreteHMM.from_hmm(self.hmm)
+        self.perm_selector = MinEntropySelector(self.possible_perms, self.bhmm, calibrated=True, save_history=True)
         self.ic = InterruptedClassifier(self.observation_dist, self.testing_states)
 
     def test_ic(self):
@@ -42,10 +44,10 @@ class MyTestCase(unittest.TestCase):
         while (~((ground_truth.unsqueeze(-1) == self.testing_states.unsqueeze(-2)).any(-2))).any(-1):
             training_data = self.hmm.sample((num_training_samples, time_dim))
             ground_truth = training_data.states[..., 0]
-        _ = perm_hmm.training.interrupted_training.train_ic(self.ic, training_data.observations, ground_truth, self.num_states)
+        _ = perm_hmm.training.interrupted_training.train_ic(self.ic, self.testing_states, training_data.observations, ground_truth, self.num_states)
         num_testing_samples = 300
         testing_data = self.hmm.sample((num_testing_samples, time_dim))
-        class_break_ratio = self.ic.classify(testing_data.observations)
+        class_break_ratio = self.ic.classify(testing_data.observations, self.testing_states, verbosity=1)
         iep = InterruptedEmpiricalPostprocessor(
             testing_data.states[..., 0],
             self.testing_states,
@@ -58,7 +60,7 @@ class MyTestCase(unittest.TestCase):
         all_possible_runs = torch.stack([num_to_data(x, time_dim) for x in range(2**time_dim)])
         plisd = self.hmm.posterior_log_initial_state_dist(all_possible_runs)
         lp = self.hmm.log_prob(all_possible_runs)
-        class_break_ratio = self.ic.classify(all_possible_runs)
+        class_break_ratio = self.ic.classify(all_possible_runs, self.testing_states, verbosity=1)
         iep = InterruptedExactPostprocessor(
             lp,
             plisd,

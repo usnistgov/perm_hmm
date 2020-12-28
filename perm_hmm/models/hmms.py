@@ -14,7 +14,7 @@ from functools import reduce
 import torch
 import pyro
 import pyro.distributions as dist
-from pyro.distributions.hmm import DiscreteHMM
+import pyro.distributions.hmm
 from pyro.distributions.hmm import _sequential_logmatmulexp
 from pyro.distributions.util import broadcast_shape
 
@@ -23,7 +23,7 @@ from perm_hmm.return_types import HMMOutput, PHMMOutHistory, PermHMMOutput
 from perm_hmm.strategies.selector import PermSelector
 
 
-class SampleableDiscreteHMM(DiscreteHMM):
+class DiscreteHMM(pyro.distributions.hmm.DiscreteHMM):
     """
     A discrete hidden Markov model which generates data.
 
@@ -108,6 +108,35 @@ class SampleableDiscreteHMM(DiscreteHMM):
                 self.observation_dist._param
             ]
 
+    def _nonevent_output_shape(self, sample_shape=()):
+        duration = self.duration
+        if duration is None:
+            if sample_shape == ():
+                time_shape = (1,)
+            else:
+                time_shape = sample_shape[-1:]
+            shape = sample_shape[:-1] + self.batch_shape + time_shape
+        else:
+            time_shape = (duration,)
+            shape = sample_shape + self.batch_shape + time_shape
+        return shape
+
+    def _flatten_batch(self, shape):
+        time_shape = shape[-1:]
+        total_batches = reduce(mul, shape[:-1], 1)
+        flat_shape = (total_batches,) + time_shape
+        tmats = self.transition_logits.exp().expand(
+            shape + self.transition_logits.shape[-2:]
+        ).reshape(flat_shape + self.transition_logits.shape[-2:])
+        b = self.observation_dist.batch_shape
+        b_shape = broadcast_shape(shape, b[:-1])
+        k = self.observation_dist._param.shape
+        flat_params = \
+            self.observation_dist._param.expand(
+                b_shape + b[-1:] + (-1,)*(len(k)-len(b))
+            ).reshape(flat_shape + b[-1:] + (-1,)*(len(k)-len(b)))
+        return flat_shape, tmats, flat_params
+
     def sample(self, sample_shape=()):
         """
         Sample from the distribution.
@@ -137,27 +166,9 @@ class SampleableDiscreteHMM(DiscreteHMM):
         :raises ValueError: if the model shape does not broadcast to the
             sample shape.
         """
-        if self.event_shape[0] == 1:
-            if sample_shape == ():
-                time_shape = (1,)
-            else:
-                time_shape = sample_shape[-1:]
-            shape = sample_shape[:-1] + self.batch_shape + time_shape
-        else:
-            time_shape = (self.event_shape[0],)
-            shape = sample_shape + self.batch_shape + time_shape
-        total_batches = reduce(mul, shape[:-1], 1)
-        flat_shape = (total_batches,) + time_shape
-        tmats = self.transition_logits.expand(
-            flat_shape + self.transition_logits.shape[-2:]
-        ).exp()
-        b = self.observation_dist.batch_shape
-        b_shape = broadcast_shape(shape[:-1], b[:-1])
-        k = self.observation_dist._param.shape
-        flat_params = \
-            self.observation_dist._param.expand(
-                b_shape + b[-1:] + (-1,)*(len(k)-len(b))
-            ).reshape((total_batches,) + b[-1:] + (-1,)*(len(k)-len(b)))
+        shape = self._nonevent_output_shape(sample_shape)
+        flat_shape, tmats, flat_params = self._flatten_batch(shape)
+        total_batches, time_steps = flat_shape
         dtype = self.observation_dist.sample().dtype
         states = torch.empty(flat_shape, dtype=int)
         observations = \
@@ -169,10 +180,10 @@ class SampleableDiscreteHMM(DiscreteHMM):
             observations[batch, 0] = pyro.sample(
                 "y_{}_0".format(batch),
                 type(self.observation_dist)(
-                    flat_params[batch, states[batch, 0]]
+                    flat_params[batch, 0, states[batch, 0]]
                 ),
             )
-            for t in pyro.markov(range(1, time_shape[0])):
+            for t in pyro.markov(range(1, time_steps)):
                 states[batch, t] = pyro.sample(
                     "x_{}_{}".format(batch, t),
                     dist.Categorical(tmats[batch, t - 1, states[batch, t - 1]]),
@@ -180,14 +191,11 @@ class SampleableDiscreteHMM(DiscreteHMM):
                 observations[batch, t] = pyro.sample(
                     "y_{}_{}".format(batch, t),
                     type(self.observation_dist)(
-                        flat_params[batch, states[batch, t]]
+                        flat_params[batch, t, states[batch, t]]
                     ),
                 )
         states = states.reshape(shape)
         observations = observations.reshape(shape + self.observation_dist.event_shape)
-        if (self.event_shape[0] == 1) and (sample_shape == ()):
-            states.squeeze_(0)
-            observations.squeeze_(0)
         return HMMOutput(states, observations)
 
     def log_prob(self, value):
@@ -211,7 +219,7 @@ class SampleableDiscreteHMM(DiscreteHMM):
         return result
 
 
-class PermutedDiscreteHMM(SampleableDiscreteHMM):
+class PermutedDiscreteHMM(DiscreteHMM):
     """
     Computes minimal expected posterior entropy pemutations as new data is
     observed.
@@ -312,35 +320,15 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
         if perm_selector is None:
             return super().sample(sample_shape)
 
-        if self.event_shape[0] == 1:
-            if sample_shape == ():
-                time_shape = (1,)
-            else:
-                time_shape = sample_shape[-1:]
-            shape = sample_shape[:-1] + self.batch_shape + time_shape
-        else:
-            time_shape = (self.event_shape[0],)
-            shape = sample_shape + self.batch_shape + time_shape
-        total_batches = reduce(mul, shape[:-1], 1)
-        flat_shape = (total_batches,) + time_shape
-        tmats = \
-            self.transition_logits.expand(
-                flat_shape + self.transition_logits.shape[-2:]).exp()
-        b = self.observation_dist.batch_shape
-        b_shape = broadcast_shape(shape[:-1], b[:-1])
-        k = self.observation_dist._param.shape
-        flat_params = \
-            self.observation_dist._param.expand(
-                b_shape + b[-1:] + (-1,)*(len(k)-len(b))
-            ).reshape((total_batches,) + b[-1:] + (-1,)*(len(k)-len(b)))
-
+        shape = self._nonevent_output_shape(sample_shape)
+        flat_shape, tmats, flat_params = self._flatten_batch(shape)
+        total_batches, time_steps = flat_shape
         dtype = self.observation_dist.sample().dtype
         states = torch.empty(flat_shape, dtype=int)
         observations = \
             torch.empty(
                 flat_shape + self.observation_dist.event_shape, dtype=dtype
             )
-
         with pyro.plate("batches", total_batches) as batch:
             states[batch, 0] = pyro.sample(
                 "x_{}_0".format(batch),
@@ -349,12 +337,12 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
             observations[batch, 0] = pyro.sample(
                 "y_{}_0".format(batch),
                 type(self.observation_dist)(
-                    flat_params[batch, states[batch, 0]]
+                    flat_params[batch, 0, states[batch, 0]]
                 ),
             )
             for t in pyro.markov(range(1, flat_shape[-1])):
                 shaped_o = observations[batch, t-1].reshape(shape[:-1] + self.observation_dist.event_shape)
-                perm = perm_selector.perm(shaped_o, event_dims=self.observation_dist.event_dim).reshape(total_batches, len(self.initial_logits))
+                perm = perm_selector.get_perm(shaped_o, event_dims=self.observation_dist.event_dim).reshape(total_batches, len(self.initial_logits))
                 states[batch, t] = pyro.sample(
                     "x_{}_{}".format(batch, t),
                     dist.Categorical(
@@ -366,11 +354,11 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
                 observations[batch, t] = pyro.sample(
                     "y_{}_{}".format(batch, t),
                     type(self.observation_dist)(
-                        flat_params[batch, states[batch, t]]
+                        flat_params[batch, t, states[batch, t]]
                     ),
                 )
             shaped_o = observations[batch, -1].reshape(shape[:-1] + self.observation_dist.event_shape)
-            perm = perm_selector.perm(shaped_o, event_dims=self.observation_dist.event_dim).reshape(total_batches, len(self.initial_logits))
+            perm = perm_selector.get_perm(shaped_o, event_dims=self.observation_dist.event_dim).reshape(total_batches, len(self.initial_logits))
         states = states.reshape(shape)
         observations = observations.reshape(shape + self.observation_dist.event_shape)
         return HMMOutput(
@@ -384,7 +372,7 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
             batch_shape + self.transition_logits.shape[-2:]
         )
         t_logits = t_logits[wrap_index(perm, batch_shape=perm.shape[:-1])]
-        return SampleableDiscreteHMM(self.initial_logits, t_logits, self.observation_dist)
+        return DiscreteHMM(self.initial_logits, t_logits, self.observation_dist)
 
     def posterior_log_initial_state_dist(self, data, perm=None):
         """
@@ -406,11 +394,11 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
                 batch_shape + self.transition_logits.shape[-2:]
             )
             t_logits = t_logits[wrap_index(perm, batch_shape=perm.shape[:-1])]
-            return SampleableDiscreteHMM(self.initial_logits,
-                                         t_logits,
-                                         self.observation_dist).posterior_log_initial_state_dist(data)
+            return DiscreteHMM(self.initial_logits,
+                               t_logits,
+                               self.observation_dist).posterior_log_initial_state_dist(data)
 
-    def log_prob_with_perm(self, data, perm: torch.Tensor):
+    def log_prob_with_perm(self, data, perm=None):
         """
         Computes the log prob of a run, using the permutation sequence
         that was applied to generate the data.
@@ -434,6 +422,8 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
         .. seealso:: Method
             :py:meth:`perm_hmm.sampleable.SampleableDiscreteHMM.log_prob`
         """
+        if perm is None:
+            return super().log_prob(data)
         batch_shape = perm.shape[:-1]
         if data.shape[:len(data.shape)-self.observation_dist.event_dim] != batch_shape:
             raise ValueError("Perms and data do not have the same batch shape.")
@@ -441,9 +431,9 @@ class PermutedDiscreteHMM(SampleableDiscreteHMM):
             batch_shape + self.transition_logits.shape[-2:]
         )
         t_logits = t_logits[wrap_index(perm, batch_shape=perm.shape[:-1])]
-        return SampleableDiscreteHMM(self.initial_logits,
-                                     t_logits,
-                                     self.observation_dist).log_prob(data)
+        return DiscreteHMM(self.initial_logits,
+                           t_logits,
+                           self.observation_dist).log_prob(data)
 
 
 def random_hmm(n):
@@ -462,9 +452,9 @@ def random_hmm(n):
     initial_logits = (torch.ones(n) / n).log()
     transition_logits = dirichlet.sample((n,))
     observation_dist = dist.Bernoulli(torch.rand(n))
-    return SampleableDiscreteHMM(initial_logits, transition_logits, observation_dist)
+    return DiscreteHMM(initial_logits, transition_logits, observation_dist)
 
 
 def random_phmm(n):
     hmm = random_hmm(n)
-    return PermutedDiscreteHMM.from_hmm(hmm, id_and_transpositions(n))
+    return PermutedDiscreteHMM.from_hmm(hmm)
