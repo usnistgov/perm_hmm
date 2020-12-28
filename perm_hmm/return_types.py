@@ -184,12 +184,6 @@ class ClassBreakRatio(NamedTuple):
     """
 
 
-class ExperimentParameters(NamedTuple):
-    perm_params: PermutedParameters
-    testing_states: torch.Tensor
-    num_bins: torch.Tensor
-
-
 class ExactRun(NamedTuple):
     """
     A data structure for the output of an exact misclassification experiment.

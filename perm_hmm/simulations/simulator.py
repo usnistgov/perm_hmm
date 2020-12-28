@@ -122,7 +122,7 @@ class HMMSimulator(object):
         else:
             perms = None
         if save_history and (perm_selector is not None):
-            history = perm_selector.history
+            history = perm_selector.calc_history
         data = output.observations
         if classifier is None:
             classifier = PermClassifier(self.phmm)
