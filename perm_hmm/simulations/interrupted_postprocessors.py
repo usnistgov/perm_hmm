@@ -12,7 +12,7 @@ class InterruptedExactPostprocessor(ExactPostprocessor):
     """
 
     def __init__(self, log_prob, log_post_dist, log_prior_dist, testing_states,
-                 class_break_ratio):
+                 classifications, break_flag=None, log_like_ratio=None):
         """
         Initializes the postprocessor.
 
@@ -39,9 +39,11 @@ class InterruptedExactPostprocessor(ExactPostprocessor):
 
         See superclass for details on other inputs.
         """
-        classifications, break_flag, ratios = class_break_ratio
-        self.ratios = ratios
-        score = self.ratios.abs()
+        self.ratios = log_like_ratio
+        if self.ratios is not None:
+            score = self.ratios.abs()
+        else:
+            score = self.ratios
         super().__init__(
             log_prob,
             log_post_dist,
@@ -69,18 +71,22 @@ class InterruptedExactPostprocessor(ExactPostprocessor):
             self.log_prob[postselect_mask] - remaining_log_prob
         postselected_all_classifications = \
             self.classifications[..., postselect_mask]
-        postselected_all_break_flag = self.break_flag[..., postselect_mask]
-        postselected_all_ratios = self.ratios[..., postselect_mask]
+        if self.break_flag is not None:
+            postselected_all_break_flag = self.break_flag[..., postselect_mask]
+        else:
+            postselected_all_break_flag = None
+        if self.break_flag is not None:
+            postselected_all_ratios = self.ratios[..., postselect_mask]
+        else:
+            postselected_all_ratios = None
         postselected_postprocessor = InterruptedExactPostprocessor(
             postselected_log_prob,
             postselected_post_dist,
             self.log_prior_dist,
             self.testing_states,
-            perm_hmm.return_types.ClassBreakRatio(
-                postselected_all_classifications,
-                postselected_all_break_flag,
-                postselected_all_ratios,
-            ),
+            postselected_all_classifications,
+            postselected_all_break_flag,
+            postselected_all_ratios,
         )
         return postselected_postprocessor
 

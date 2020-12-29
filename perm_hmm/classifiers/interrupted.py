@@ -12,7 +12,7 @@ from perm_hmm.return_types import ClassBreakRatio
 from perm_hmm.classifiers.generic_classifiers import Classifier
 
 
-class InterruptedClassifier(Classifier):
+class IIDInterruptedClassifier(Classifier):
     r"""
     A classifier which will terminate before the end of a run if a likelihood ratio exceeds a threshold.
 
@@ -65,7 +65,7 @@ class InterruptedClassifier(Classifier):
             )
 
 
-class BinaryIntClassifier(Classifier):
+class IIDBinaryIntClassifier(Classifier):
 
     def __init__(self, bright_model, dark_model, bright_ratio, dark_ratio):
         self.bright_model = bright_model

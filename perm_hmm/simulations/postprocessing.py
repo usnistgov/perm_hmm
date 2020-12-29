@@ -327,7 +327,7 @@ class EmpiricalPostprocessor(object):
     def postselection_percentage_mask(self, prob_to_keep):
         if self.score is None:
             raise NotImplementedError(
-                "The runs were not scored in the subclass init.")
+                "The data is not scored for postselection.")
         sort_score = self.score.sort()
         mask = torch.zeros_like(self.score, dtype=bool)
         mask[sort_score.indices[:round(len(self.score)*prob_to_keep)]] = True

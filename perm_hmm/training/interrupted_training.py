@@ -1,9 +1,9 @@
 import torch
-from perm_hmm.classifiers.interrupted import BinaryIntClassifier, InterruptedClassifier
+from perm_hmm.classifiers.interrupted import IIDBinaryIntClassifier, IIDInterruptedClassifier
 from perm_hmm.simulations.interrupted_postprocessors import InterruptedEmpiricalPostprocessor, InterruptedExactPostprocessor
 
 
-def exact_train_ic(ic: InterruptedClassifier, testing_states, all_data, log_probs, log_post_dist, log_prior_dist,
+def exact_train_ic(ic: IIDInterruptedClassifier, testing_states, all_data, log_probs, log_post_dist, log_prior_dist,
                    num_ratios=20):
     """
     Train the interrupted classifier using the exact chances of the data occurring.
@@ -25,7 +25,6 @@ def exact_train_ic(ic: InterruptedClassifier, testing_states, all_data, log_prob
         interrupted_results = ic.classify(
             all_data,
             testing_states,
-            verbosity=True,
         )
         iep = InterruptedExactPostprocessor(
             log_probs,
@@ -41,7 +40,7 @@ def exact_train_ic(ic: InterruptedClassifier, testing_states, all_data, log_prob
     return min_rate.values
 
 
-def train_ic(ic: InterruptedClassifier, testing_states, training_data, ground_truth, total_num_states, num_ratios=20):
+def train_ic(ic: IIDInterruptedClassifier, testing_states, training_data, ground_truth, total_num_states, num_ratios=20):
     """
     :param bayes_perm_hmm.interrupted.InterruptedClassifier ic: the InterruptedClassifier to train.
     :param training_data: data to train on
@@ -70,7 +69,7 @@ def train_ic(ic: InterruptedClassifier, testing_states, training_data, ground_tr
     ic.ratio = spaced_ratios[min_rate.indices]
     return min_rate.values
 
-def train_binary(bin_ic: BinaryIntClassifier, training_data, actually_bright, num_ratios=20):
+def train_binary(bin_ic: IIDBinaryIntClassifier, training_data, actually_bright, num_ratios=20):
     """
     Trains the classifier. This is to find the optimal likelihood ratio
     thresholds to minimize classification error.

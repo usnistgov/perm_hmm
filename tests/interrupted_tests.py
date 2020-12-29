@@ -1,7 +1,7 @@
 import unittest
 import torch
 import pyro.distributions as dist
-from perm_hmm.classifiers.interrupted import InterruptedClassifier
+from perm_hmm.classifiers.interrupted import IIDInterruptedClassifier
 from perm_hmm.models.hmms import DiscreteHMM, PermutedDiscreteHMM
 from perm_hmm.simulations.interrupted_postprocessors import InterruptedEmpiricalPostprocessor, InterruptedExactPostprocessor
 import perm_hmm.training.interrupted_training
@@ -33,8 +33,9 @@ class MyTestCase(unittest.TestCase):
             self.observation_dist,
         )
         self.bhmm = PermutedDiscreteHMM.from_hmm(self.hmm)
-        self.perm_selector = MinEntropySelector(self.possible_perms, self.bhmm, calibrated=True, save_history=True)
-        self.ic = InterruptedClassifier(self.observation_dist, self.testing_states)
+        self.perm_selector = MinEntropySelector(self.possible_perms, self.bhmm,
+                                                save_history=True)
+        self.ic = IIDInterruptedClassifier(self.observation_dist, self.testing_states)
 
     def test_ic(self):
         num_training_samples = 100

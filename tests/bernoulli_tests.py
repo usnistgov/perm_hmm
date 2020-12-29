@@ -1,7 +1,7 @@
 import unittest
 import torch
 import pyro.distributions as dist
-from perm_hmm.classifiers.interrupted import InterruptedClassifier
+from perm_hmm.classifiers.interrupted import IIDInterruptedClassifier
 from perm_hmm.models.hmms import DiscreteHMM, PermutedDiscreteHMM
 from perm_hmm.simulations.simulator import HMMSimulator
 from perm_hmm.util import transpositions, num_to_data
@@ -36,8 +36,9 @@ class MyTestCase(unittest.TestCase):
             self.observation_dist,
         )
         self.bhmm = PermutedDiscreteHMM.from_hmm(self.hmm)
-        self.perm_selector = MinEntropySelector(self.possible_perms, self.bhmm, calibrated=True, save_history=True)
-        self.ic = InterruptedClassifier(self.observation_dist, self.testing_states)
+        self.perm_selector = MinEntropySelector(self.possible_perms, self.bhmm,
+                                                save_history=True)
+        self.ic = IIDInterruptedClassifier(self.observation_dist, self.testing_states)
         self.bs = HMMSimulator(
             self.bhmm,
         )
@@ -76,9 +77,9 @@ class MyTestCase(unittest.TestCase):
         nop = self.bs.all_classifications(self.num_bins, self.testing_states)
         pp = self.bs.all_classifications(self.num_bins, self.testing_states,
                                          perm_selector=self.perm_selector)
-        class_break_ratio = self.ic.classify(data, self.testing_states, verbosity=1)
+        ic_classifications = self.ic.classify(data, self.testing_states)
         ip = InterruptedExactPostprocessor(lp, plisd, self.bhmm.initial_logits,
-                                           self.testing_states, class_break_ratio)
+                                           self.testing_states, ic_classifications)
         i_classifications = ip.classifications
         no_classifications = nop.classifications
         p_classifications = pp.classifications

@@ -5,7 +5,7 @@ import pyro.distributions as dist
 import perm_hmm.models.hmms
 from perm_hmm.strategies.min_ent import MinEntropySelector
 from perm_hmm.models.hmms import DiscreteHMM, PermutedDiscreteHMM
-from perm_hmm.classifiers.interrupted import InterruptedClassifier
+from perm_hmm.classifiers.interrupted import IIDInterruptedClassifier
 from perm_hmm.training.interrupted_training import train_ic, exact_train_ic
 import perm_hmm.simulations.map_postprocessors as map
 import perm_hmm.simulations.interrupted_postprocessors as inp
@@ -30,7 +30,8 @@ class MyTestCase(unittest.TestCase):
         self.bdhmm = PermutedDiscreteHMM(self.initial_logits,
                                          self.transition_logits,
                                          self.observation_dist)
-        self.perm_selector = MinEntropySelector(self.possible_perms, self.bdhmm, calibrated=True, save_history=True)
+        self.perm_selector = MinEntropySelector(self.possible_perms, self.bdhmm,
+                                                save_history=True)
         self.shmm = DiscreteHMM(self.initial_logits,
                                 self.transition_logits,
                                 self.observation_dist)
@@ -64,7 +65,7 @@ class MyTestCase(unittest.TestCase):
         bright_state = observation_params.argmax(-1)
         dark_state = observation_params.argmin(-1)
         testing_states = torch.tensor([bright_state, dark_state], dtype=int)
-        ic = InterruptedClassifier(
+        ic = IIDInterruptedClassifier(
             self.observation_dist,
             testing_states,
         )
@@ -118,7 +119,7 @@ class MyTestCase(unittest.TestCase):
         print(mr)
         self.assertTrue(mr.confusions.sum(-1)[self.testing_states].allclose(torch.tensor(1.)))
         _ = exact_train_ic(ic, self.testing_states, all_data, naive_lp, all_naive_post, self.initial_logits)
-        ic_results = ic.classify(all_data, self.testing_states, verbosity=1)
+        ic_results = ic.classify(all_data, self.testing_states)
         ip = inp.InterruptedExactPostprocessor(
             naive_lp,
             all_naive_post,

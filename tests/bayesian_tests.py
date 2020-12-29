@@ -21,7 +21,7 @@ class BdhmmTestCase(unittest.TestCase):
         self.shmm = DiscreteHMM(self.initial_logits,
                                 self.transition_logits,
                                 self.observation_dist)
-        self.perm_selector = MinEntropySelector(self.possible_perms, self.bdhmm, calibrated=True)
+        self.perm_selector = MinEntropySelector(self.possible_perms, self.bdhmm)
         self.data = torch.tensor([1.0, 1, 0])
         self.data_1 = torch.tensor([1, 1.0, 0, 1, 0, 0])
         self.data_2 = torch.tensor([1.0, 1, 1])
@@ -163,7 +163,8 @@ class BdhmmTestCase(unittest.TestCase):
         observation_dist = dist.Bernoulli(torch.rand(n_states))
         possible_perms = torch.arange(n_states)[None, :]
         pdh = PermutedDiscreteHMM(initial_logits, transition_logits, observation_dist)
-        perm_selector = MinEntropySelector(possible_perms, pdh, calibrated=True, save_history=True)
+        perm_selector = MinEntropySelector(possible_perms, pdh,
+                                           save_history=True)
         self.assertTrue(perm_selector.expected_entropy().shape == (1,))
 
 if __name__ == '__main__':

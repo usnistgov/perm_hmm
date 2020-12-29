@@ -5,7 +5,7 @@ import pyro.distributions as dist
 
 from perm_hmm.models.hmms import PermutedDiscreteHMM
 from perm_hmm.simulations.simulator import HMMSimulator
-from perm_hmm.classifiers.interrupted import InterruptedClassifier
+from perm_hmm.classifiers.interrupted import IIDInterruptedClassifier
 from perm_hmm.training.interrupted_training import exact_train_ic, train_ic
 from perm_hmm.util import num_to_data
 from perm_hmm.simulations.interrupted_postprocessors import InterruptedExactPostprocessor, InterruptedEmpiricalPostprocessor
@@ -26,9 +26,9 @@ def exact_rates(phmm: PermutedDiscreteHMM, testing_states, num_bins, perm_select
         b"num_bins": torch.tensor(num_bins),
     }
     simulator = HMMSimulator(phmm)
-    ic = InterruptedClassifier(
+    ic = IIDInterruptedClassifier(
         phmm.observation_dist,
-        testing_states,
+        torch.tensor(1.),
     )
     base = len(phmm.observation_dist.enumerate_support())
     data = torch.stack(
@@ -74,9 +74,9 @@ def empirical_rates(phmm: PermutedDiscreteHMM, testing_states, num_bins, perm_se
         b"num_bins": torch.tensor(num_bins),
     }
     simulator = HMMSimulator(phmm)
-    ic = InterruptedClassifier(
+    ic = IIDInterruptedClassifier(
         phmm.observation_dist,
-        testing_states,
+        torch.tensor(1.),
     )
     x, training_data = phmm.sample((num_train, num_bins))
     _ = train_ic(ic, testing_states, training_data, x[..., 0], len(phmm.initial_logits), num_ratios=num_ratios)
@@ -121,10 +121,7 @@ def main(args):
     perm_hmm = PermutedDiscreteHMM(bright_or_dark, pij.log(), output_dist)
     num_bins = args.num_bins
     perm_selector = MinEntropySelector(
-        torch.from_numpy(beryllium.allowable_permutations()),
-        perm_hmm,
-        calibrated=True
-    )
+        torch.from_numpy(beryllium.allowable_permutations()), perm_hmm)
     print("Running simulation, please wait...")
     if args.save_raw_data:
         verbosity = 2

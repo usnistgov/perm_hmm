@@ -222,51 +222,50 @@ class BayesCurrentCondInitialDistribution(BayesDistribution):
 
 class MinEntropySelector(PermSelector):
 
-    def __init__(self, possible_perms, hmm, calibrated=False, save_history=False):
+    def __init__(self, possible_perms, hmm, save_history=False):
         # TODO: Fix this class to work with heterogeneous hmms
         super().__init__(possible_perms, save_history=save_history)
         self.hmm = hmm
-        self.calibrated = calibrated
-        # A flag to guarantee that the model is trained.
-        # The training should take place before it is used for
-        # selecting permutations.
-        self.reverse_perm_dict = {
-            tuple(val.tolist()): torch.tensor(key, dtype=torch.long)
-            for key, val in enumerate(self.possible_perms)
-        }
-        """
-        The reverse of the permutations.
-        """
         self.prior_log_inits = None
         self.prior_log_cur_cond_init = None
         self.prior_log_current = None
         self.time_step = 0
-        if self.calibrated:
-            n_perms = len(possible_perms)
-            self.prior_log_inits = \
-                BayesInitialDistribution(self.hmm.initial_logits.clone().detach())
-            """
-            a :py:class:`BayesInitialDistribution`. Used to compute posterior
-            initial state distributions.
-            """
+        n_perms = len(possible_perms)
+        self.prior_log_inits = \
+            BayesInitialDistribution(self.hmm.initial_logits.clone().detach())
+        """
+        a :py:class:`BayesInitialDistribution`. Used to compute posterior
+        initial state distributions.
+        """
 
-            self.prior_log_current = \
-                BayesCurrentDistribution(
-                    self.hmm.initial_logits.clone().detach().repeat(n_perms, 1)
-                )
-            r"""
-            a :py:class:`BayesCurrentDistribution`. Used to compute
-            distributions of the form :math:`p(s_n|y^{i-1})`.
-            """
+        self.prior_log_current = \
+            BayesCurrentDistribution(
+                self.hmm.initial_logits.clone().detach().repeat(n_perms, 1)
+            )
+        r"""
+        a :py:class:`BayesCurrentDistribution`. Used to compute
+        distributions of the form :math:`p(s_n|y^{i-1})`.
+        """
 
-            prior_log_cur_cond_init = \
-                (torch.eye(len(self.hmm.initial_logits)) + ZERO).log()
-            prior_log_cur_cond_init -= \
-                prior_log_cur_cond_init.logsumexp(axis=-1, keepdim=True)
-            self.prior_log_cur_cond_init = \
-                BayesCurrentCondInitialDistribution(
-                    prior_log_cur_cond_init.repeat(n_perms, 1, 1)
-                )
+        prior_log_cur_cond_init = \
+            (torch.eye(len(self.hmm.initial_logits)) + ZERO).log()
+        prior_log_cur_cond_init -= \
+            prior_log_cur_cond_init.logsumexp(axis=-1, keepdim=True)
+        self.prior_log_cur_cond_init = \
+            BayesCurrentCondInitialDistribution(
+                prior_log_cur_cond_init.repeat(n_perms, 1, 1)
+            )
+
+    @property
+    def reverse_perm_dict(self):
+        return {
+            tuple(val.tolist()): torch.tensor(key, dtype=torch.long)
+            for key, val in enumerate(self.possible_perms)
+        }
+
+    @reverse_perm_dict.setter
+    def reverse_perm_dict(self, val):
+        self.possible_perms = torch.stack(tuple(val.values()))
 
     def to_perm_index(self, perm):
         """
@@ -297,8 +296,6 @@ class MinEntropySelector(PermSelector):
         Resets the selector.
         """
         super().reset(save_history=save_history)
-        if not self.calibrated:
-            raise ValueError("Model is not yet calibrated.")
         n_perms = len(self.possible_perms)
         n_states = len(self.hmm.initial_logits)
         self.prior_log_inits.logits = self.hmm.initial_logits.clone().detach()
@@ -311,13 +308,6 @@ class MinEntropySelector(PermSelector):
         self.prior_log_cur_cond_init.logits = \
             log_state_cond_initial_dist.repeat(n_perms, 1, 1)
         self.time_step = 0
-        # self.shape = None
-        # self._perm_history = []
-        # self.save_history = save_history
-        # self._calc_history = {
-        #     b"dist_array": [],
-        #     b"entropy_array": [],
-        # }
 
     def update_prior(self, val):
         """

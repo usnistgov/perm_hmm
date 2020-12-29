@@ -29,8 +29,11 @@ class MyTestCase(unittest.TestCase):
             self.transition_logits,
             dist.Bernoulli(torch.rand(2, 2))
         )
-        self.deep_perm_selector = MinEntropySelector(self.possible_perms, self.deep_hmm, calibrated=True, save_history=True)
-        self.perm_selector = MinEntropySelector(self.possible_perms, self.bdhmm, calibrated=True, save_history=True)
+        self.deep_perm_selector = MinEntropySelector(self.possible_perms,
+                                                     self.deep_hmm,
+                                                     save_history=True)
+        self.perm_selector = MinEntropySelector(self.possible_perms, self.bdhmm,
+                                                save_history=True)
 
     def test_sample_minent(self):
         x, y = self.bdhmm.sample((10, 7), self.perm_selector)

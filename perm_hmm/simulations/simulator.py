@@ -10,6 +10,7 @@ from perm_hmm.util import num_to_data
 from perm_hmm.simulations.postprocessing import ExactPostprocessor, EmpiricalPostprocessor
 from perm_hmm.classifiers.perm_classifier import PermClassifier
 
+
 class HMMSimulator(object):
 
     def __init__(self, phmm):
@@ -127,7 +128,7 @@ class HMMSimulator(object):
         if classifier is None:
             classifier = PermClassifier(self.phmm)
         if perms is not None:
-            classi_dict = classifier.classify(data, testing_states, perms, verbosity=verbosity)
+            classi_dict = classifier.classify(data, testing_states, perms=perms, verbosity=verbosity)
         else:
             classi_dict = classifier.classify(data, testing_states, verbosity=verbosity)
         if verbosity:
