@@ -61,6 +61,11 @@ def clopper_pearson(alpha, num_successes, total_trials):
     return torch.stack((torch.from_numpy(lower), torch.from_numpy(upper)))
 
 
+def log_zero_one(state: torch.Tensor, classification: torch.Tensor):
+    loss = classification.unsqueeze(-2) != state.unsqueeze(-1)
+    floss = loss.float()
+
+
 class ExactPostprocessor(object):
     """
     An abstract class for postprocessing the data obtained from running
@@ -70,81 +75,23 @@ class ExactPostprocessor(object):
         :py:class:`PostDistExactPostprocessor`
     """
 
-    def __init__(self, log_prob, log_post_dist, log_prior_dist, testing_states,
-                 classifications=None, score=None):
+    def __init__(self, log_joint, testing_states, classifications=None, score=None):
         """
-        The minimal things which are needed to produce the misclassification
-        rates. Requires that classified_bright and classified_dark are specified
-        in a subclass init.
-
-        :param bayes_perm_hmm.return_types.LogProbAndPostDist log_prob_post_dist:
-            The log likelihoods and log posterior initial state distributions
-            of all the runs. The .log_prob and .log_post_dist should have
-            same first dimension.
-        :param torch.Tensor log_prior_dist: The log prior initial state distribution.
-            shape ``(state_dim,)``
-        :param int bright_state: indicates what index corresponds to the bright
-            state.
-        :param int dark_state: indicates what index corresponds to the dark
-            state.
+        :param torch.Tensor log_joint:
+        :param testing_states:
+        :param classifications:
+        :param score:
         """
-        self.log_prob = log_prob
-        """
-        The log likelihoods of all the runs.
-        
-        A :py:class:`torch.Tensor`, float, 
-        
-            shape ``(n_runs,)``
-        """
-        self.log_post_dist = log_post_dist
-        """
-        The log posterior initial state distributions of all the runs to 
-        process.
-        
-        A :py:class:`torch.Tensor`, float, 
-        
-            shape ``(n_runs,)``
-        """
-        self.log_prior_dist = log_prior_dist
-        """
-        The log prior initial state distribution.
-        
-        A :py:class:`torch.Tensor`, float, 
-        
-            shape ``(state_dim,)``
-        """
+        self.log_joint = log_joint
         self.testing_states = testing_states
-        """
-        The states to perform classifications for.
-        
-        A :py:class:`torch.Tensor`, int,
-        
-            shape ``(num_testing_states,)``
-        """
         self.log_data_given_state = \
             self.log_post_dist + self.log_prob.unsqueeze(-1) - \
             self.log_prior_dist.unsqueeze(-2)
-        """
-        The log likelihoods of the runs, given the initial states.
-        
-        A :py:class:`torch.Tensor`, float, 
-        
-            shape ``(n_runs, state_dim)``
-        """
         self.classifications = classifications
-        """
-        All classifications, :py:class:`torch.Tensor`, int
-        
-            shape ``(n_runs,)``
-        """
         self.score = score
-        """
-        The score used to postselect the runs.
-        
-        A :py:class:`torch.Tensor`, float, 
-        
-            shape ``(n_runs,)``
-        """
+
+    def risk(self, log_loss):
+        pass
 
     def misclassification_rates(self) -> AllRates:
         """

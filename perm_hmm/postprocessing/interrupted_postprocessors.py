@@ -1,8 +1,6 @@
 import torch
-import pyro
 
-import perm_hmm.return_types
-from perm_hmm.simulations.postprocessing import ExactPostprocessor, EmpiricalPostprocessor
+from perm_hmm.postprocessing.postprocessing import ExactPostprocessor, EmpiricalPostprocessor
 
 
 class InterruptedExactPostprocessor(ExactPostprocessor):

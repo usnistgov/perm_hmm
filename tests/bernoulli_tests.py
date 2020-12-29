@@ -7,7 +7,7 @@ from perm_hmm.simulations.simulator import HMMSimulator
 from perm_hmm.util import transpositions, num_to_data
 from perm_hmm.strategies.min_ent import MinEntropySelector
 from perm_hmm.training.interrupted_training import exact_train_ic, train_ic
-from perm_hmm.simulations.interrupted_postprocessors import InterruptedEmpiricalPostprocessor, InterruptedExactPostprocessor
+from perm_hmm.postprocessing.interrupted_postprocessors import InterruptedEmpiricalPostprocessor, InterruptedExactPostprocessor
 
 
 class MyTestCase(unittest.TestCase):

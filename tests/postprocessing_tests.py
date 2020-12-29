@@ -7,8 +7,8 @@ from perm_hmm.strategies.min_ent import MinEntropySelector
 from perm_hmm.models.hmms import DiscreteHMM, PermutedDiscreteHMM
 from perm_hmm.classifiers.interrupted import IIDInterruptedClassifier
 from perm_hmm.training.interrupted_training import train_ic, exact_train_ic
-import perm_hmm.simulations.map_postprocessors as map
-import perm_hmm.simulations.interrupted_postprocessors as inp
+import perm_hmm.postprocessing.map_postprocessors as map
+import perm_hmm.postprocessing.interrupted_postprocessors as inp
 from perm_hmm.util import transpositions, num_to_data
 from perm_hmm.classifiers.generic_classifiers import MAPClassifier
 

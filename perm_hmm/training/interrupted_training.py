@@ -1,6 +1,6 @@
 import torch
 from perm_hmm.classifiers.interrupted import IIDBinaryIntClassifier, IIDInterruptedClassifier
-from perm_hmm.simulations.interrupted_postprocessors import InterruptedEmpiricalPostprocessor, InterruptedExactPostprocessor
+from perm_hmm.postprocessing.interrupted_postprocessors import InterruptedEmpiricalPostprocessor, InterruptedExactPostprocessor
 
 
 def exact_train_ic(ic: IIDInterruptedClassifier, testing_states, all_data, log_probs, log_post_dist, log_prior_dist,

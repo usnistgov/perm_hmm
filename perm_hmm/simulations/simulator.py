@@ -2,12 +2,11 @@
 Simulates the initial state discrimination experiment using different
 methods, to compare the resulting error rates.
 """
-from typing import NamedTuple
 
 import torch
 
 from perm_hmm.util import num_to_data
-from perm_hmm.simulations.postprocessing import ExactPostprocessor, EmpiricalPostprocessor
+from perm_hmm.postprocessing.postprocessing import ExactPostprocessor, EmpiricalPostprocessor
 from perm_hmm.classifiers.perm_classifier import PermClassifier
 
 

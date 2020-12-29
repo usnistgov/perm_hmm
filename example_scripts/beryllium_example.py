@@ -1,6 +1,5 @@
 import argparse
 import torch
-import pyro
 import pyro.distributions as dist
 
 from perm_hmm.models.hmms import PermutedDiscreteHMM
@@ -8,8 +7,7 @@ from perm_hmm.simulations.simulator import HMMSimulator
 from perm_hmm.classifiers.interrupted import IIDInterruptedClassifier
 from perm_hmm.training.interrupted_training import exact_train_ic, train_ic
 from perm_hmm.util import num_to_data
-from perm_hmm.simulations.interrupted_postprocessors import InterruptedExactPostprocessor, InterruptedEmpiricalPostprocessor
-from perm_hmm.simulations.map_postprocessors import PostDistEmpiricalPostprocessor, PostDistExactPostprocessor
+from perm_hmm.postprocessing.interrupted_postprocessors import InterruptedExactPostprocessor, InterruptedEmpiricalPostprocessor
 import perm_hmm.physical_systems.beryllium as beryllium
 from perm_hmm.strategies.min_ent import MinEntropySelector
 
