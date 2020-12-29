@@ -63,3 +63,53 @@ class InterruptedClassifier(Classifier):
                 breaks.any(-1),
                 sort_lrs[..., -1],
             )
+
+
+class BinaryIntClassifier(Classifier):
+
+    def __init__(self, bright_model, dark_model, bright_ratio, dark_ratio):
+        self.bright_model = bright_model
+        self.dark_model = dark_model
+        self.bright_ratio = bright_ratio
+        self.dark_ratio = dark_ratio
+
+    def classify(self, data, testing_states, verbosity=0):
+        shape = data.shape
+        if shape == ():
+            data = data.expand(1, 1)
+        elif len(shape) == 1:
+            data = data.expand(1, -1)
+        data = data.float()
+
+        intermediate_bright_lp = self.bright_dist.log_prob(data).cumsum(dim=-1).float()
+        intermediate_dark_lp = self.dark_dist.log_prob(data).cumsum(dim=-1).float()
+        intermediate_lr = intermediate_bright_lp - intermediate_dark_lp
+
+        bright_most_likely = intermediate_lr[..., -1] > 0
+
+        break_bright = intermediate_lr > self.bright_ratio
+        break_dark = -intermediate_lr > self.dark_ratio
+
+        first_break_bright = first_nonzero(break_bright, -1)
+        first_break_dark = first_nonzero(break_dark, -1)
+        bright_first = first_break_bright < first_break_dark
+
+        bright_break_flag = break_bright.any(dim=-1)
+        dark_break_flag = break_dark.any(dim=-1)
+        break_flag = bright_break_flag | dark_break_flag
+        neither_break = ~break_flag
+        both_break = (bright_break_flag & dark_break_flag)
+        one_break = bright_break_flag.logical_xor(dark_break_flag)
+
+        classified_bright = \
+            (one_break & bright_break_flag) | \
+            (both_break & bright_first) | \
+            (neither_break & bright_most_likely)
+        if not verbosity:
+            return classified_bright
+        else:
+            return ClassBreakRatio(
+                classified_bright,
+                break_flag,
+                intermediate_lr[..., -1],
+            )
