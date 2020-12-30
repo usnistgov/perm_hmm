@@ -77,7 +77,7 @@ class MyTestCase(unittest.TestCase):
         valid_prior = log_prior[self.testing_states].unsqueeze(-1)
         test_log_rate = (valid_matrix + valid_prior)[~torch.eye(len(self.testing_states), dtype=bool)].logsumexp(-1)
         test_rate = test_log_rate.exp()
-        self.assertTrue(test_rate.isclose(average_rate, atol=1e-5))
+        self.assertTrue(test_rate.isclose(average_rate, atol=1e-7))
 
 
 
