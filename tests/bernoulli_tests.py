@@ -7,7 +7,7 @@ from perm_hmm.simulations.simulator import HMMSimulator
 from perm_hmm.util import transpositions, num_to_data
 from perm_hmm.strategies.min_ent import MinEntropySelector
 from perm_hmm.training.interrupted_training import exact_train_ic, train_ic
-from perm_hmm.postprocessing.interrupted_postprocessors import InterruptedEmpiricalPostprocessor, InterruptedExactPostprocessor
+from perm_hmm.postprocessing.postprocessing import ExactPostprocessor, EmpiricalPostprocessor
 
 
 class MyTestCase(unittest.TestCase):
@@ -55,11 +55,8 @@ class MyTestCase(unittest.TestCase):
         pp = self.bs.simulate(self.num_bins, num_samples, self.testing_states,
                                 perm_selector=self.perm_selector)
         nop, d = self.bs.simulate(self.num_bins, num_samples, self.testing_states, verbosity=1)
-        class_break_ratio = self.ic.classify(d[b"data"], self.testing_states,
-                                        verbosity=1)
-        ip = InterruptedEmpiricalPostprocessor(nop.ground_truth, self.testing_states,
-                                               len(self.bhmm.initial_logits),
-                                               *class_break_ratio)
+        i_classifications = self.ic.classify(d[b"data"], self.testing_states, verbosity=0)
+        ip = EmpiricalPostprocessor(nop.ground_truth, self.testing_states, i_classifications)
         i_classifications = ip.classifications
         no_classifications = nop.classifications
         p_classifications = pp.classifications
@@ -73,19 +70,18 @@ class MyTestCase(unittest.TestCase):
         ).float()
         lp = self.bhmm.log_prob(data)
         plisd = self.bhmm.posterior_log_initial_state_dist(data)
-        _ = exact_train_ic(self.ic, self.testing_states, data, lp, plisd, self.initial_logits)
+        log_joint = plisd.T + lp
+        _ = exact_train_ic(self.ic, self.testing_states, data, log_joint)
         nop = self.bs.all_classifications(self.num_bins, self.testing_states)
-        pp = self.bs.all_classifications(self.num_bins, self.testing_states,
-                                         perm_selector=self.perm_selector)
+        pp = self.bs.all_classifications(self.num_bins, self.testing_states, perm_selector=self.perm_selector)
         ic_classifications = self.ic.classify(data, self.testing_states)
-        ip = InterruptedExactPostprocessor(lp, plisd, self.bhmm.initial_logits,
-                                           self.testing_states, ic_classifications)
+        ip = ExactPostprocessor(log_joint, self.testing_states, ic_classifications)
         i_classifications = ip.classifications
         no_classifications = nop.classifications
         p_classifications = pp.classifications
-        print(ip.misclassification_rates())
-        print(nop.misclassification_rates())
-        print(pp.misclassification_rates())
+        print(ip.log_misclassification_rate())
+        print(nop.log_misclassification_rate())
+        print(pp.log_misclassification_rate())
 
 
 if __name__ == '__main__':

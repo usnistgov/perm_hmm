@@ -10,6 +10,7 @@ from perm_hmm.postprocessing.postprocessing import ExactPostprocessor, Empirical
 from perm_hmm.classifiers.perm_classifier import PermClassifier
 
 
+# TODO: Add postselection, perhaps by adding a .score method to the classifiers, and a score flag to the simulation
 class HMMSimulator(object):
 
     def __init__(self, phmm):
@@ -41,7 +42,6 @@ class HMMSimulator(object):
                              "states.")
         if not set(testing_states.tolist()).issubset(range(num_states)):
             raise ValueError("States to test for must be states of the model.")
-        return testing_states
 
     def all_classifications(self, num_bins, testing_states, classifier=None, perm_selector=None, verbosity=0):
         """
@@ -97,10 +97,9 @@ class HMMSimulator(object):
             classifications = classi_dict
         lp = self.phmm.log_prob_with_perm(data, perms)
         dist = self.phmm.posterior_log_initial_state_dist(data, perms)
+        log_joint = dist.T + lp
         ep = ExactPostprocessor(
-            lp,
-            dist,
-            self.phmm.initial_logits,
+            log_joint,
             testing_states,
             classifications,
         )
@@ -140,7 +139,6 @@ class HMMSimulator(object):
         ep = EmpiricalPostprocessor(
             output.states[..., 0],
             testing_states,
-            len(self.phmm.initial_logits),
             classifications,
         )
         if verbosity:

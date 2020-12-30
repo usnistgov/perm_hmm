@@ -7,7 +7,8 @@ from perm_hmm.simulations.simulator import HMMSimulator
 from perm_hmm.classifiers.interrupted import IIDInterruptedClassifier
 from perm_hmm.training.interrupted_training import exact_train_ic, train_ic
 from perm_hmm.util import num_to_data
-from perm_hmm.postprocessing.interrupted_postprocessors import InterruptedExactPostprocessor, InterruptedEmpiricalPostprocessor
+# from perm_hmm.postprocessing.interrupted_postprocessors import InterruptedExactPostprocessor, InterruptedEmpiricalPostprocessor
+from perm_hmm.postprocessing.postprocessing import ExactPostprocessor, EmpiricalPostprocessor
 import perm_hmm.physical_systems.beryllium as beryllium
 from perm_hmm.strategies.min_ent import MinEntropySelector
 
@@ -40,15 +41,22 @@ def exact_rates(phmm: PermutedDiscreteHMM, testing_states, num_bins, perm_select
     if verbosity:
         nop, nod = nop
         pp, pd = pp
-    class_break_ratio = ic.classify(data, testing_states, verbosity=True)
-    ip = InterruptedExactPostprocessor(lp, plisd, phmm.initial_logits, testing_states, class_break_ratio)
+    i_results = ic.classify(data, testing_states, verbosity=verbosity)
+    if verbosity:
+        i_classifications = i_results[0]
+    else:
+        i_classifications = i_results
+    ip = ExactPostprocessor(nop.log_joint, testing_states, i_classifications)
     i_classifications = ip.classifications
     no_classifications = nop.classifications
     p_classifications = pp.classifications
     toret =  {
-        b"interrupted_rates": ip.misclassification_rates(),
-        b"permuted_rates": pp.misclassification_rates(),
-        b"unpermuted_rates": nop.misclassification_rates(),
+        b"interrupted_log_rate": ip.log_misclassification_rate(),
+        b"permuted_log_rate": pp.log_misclassification_rate(),
+        b"unpermuted_log_rate": nop.log_misclassification_rate(),
+        b"interrupted_log_matrix": ip.log_confusion_matrix(),
+        b"permuted_log_matrix": pp.log_confusion_matrix(),
+        b"unpermuted_log_matrix": nop.log_confusion_matrix(),
         b"interrupted_classifications": i_classifications,
         b"unpermuted_classifications": no_classifications,
         b"permuted_classifications": p_classifications,
@@ -57,7 +65,7 @@ def exact_rates(phmm: PermutedDiscreteHMM, testing_states, num_bins, perm_select
     if verbosity:
         toret[b"unpermuted_extras"] = nod
         toret[b"permuted_extras"] = pd
-        toret[b"interrupted_break_ratio"] = class_break_ratio[1:]
+        toret[b"interrupted_break_ratio"] = i_results[1:]
     return toret
 
 def empirical_rates(phmm: PermutedDiscreteHMM, testing_states, num_bins, perm_selector, classifier=None, num_ratios=20, num_train=1000, num_samples=1000, confidence=.95, verbosity=0):
@@ -82,8 +90,12 @@ def empirical_rates(phmm: PermutedDiscreteHMM, testing_states, num_bins, perm_se
     nop, d = simulator.simulate(num_bins, num_samples, testing_states, classifier=classifier, verbosity=min(1, verbosity))
     if verbosity:
         pp, pd = pp
-    class_break_ratio = ic.classify(d[b"data"], testing_states, verbosity=True)
-    ip = InterruptedEmpiricalPostprocessor(nop.ground_truth, testing_states, len(phmm.initial_logits), *class_break_ratio)
+    i_results = ic.classify(d[b"data"], testing_states, verbosity=verbosity)
+    if verbosity:
+        i_classifications = i_results[0]
+    else:
+        i_classifications = i_results
+    ip = EmpiricalPostprocessor(nop.ground_truth, testing_states, i_classifications)
     i_classifications = ip.classifications
     no_classifications = nop.classifications
     p_classifications = pp.classifications
@@ -99,7 +111,7 @@ def empirical_rates(phmm: PermutedDiscreteHMM, testing_states, num_bins, perm_se
     if verbosity:
         toret[b"unpermuted_extras"] = d
         toret[b"permuted_extras"] = pd
-        toret[b"interrupted_break_ratio"] = class_break_ratio[1:]
+        toret[b"interrupted_break_ratio"] = i_results[1:]
         toret[b"training_states"] = x
         toret[b"training_data"] = training_data
     return toret

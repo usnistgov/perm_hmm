@@ -1,9 +1,10 @@
 import torch
 from perm_hmm.classifiers.interrupted import IIDBinaryIntClassifier, IIDInterruptedClassifier
-from perm_hmm.postprocessing.interrupted_postprocessors import InterruptedEmpiricalPostprocessor, InterruptedExactPostprocessor
+# from perm_hmm.postprocessing.interrupted_postprocessors import InterruptedEmpiricalPostprocessor, InterruptedExactPostprocessor
+from perm_hmm.postprocessing.postprocessing import ExactPostprocessor, EmpiricalPostprocessor
 
 
-def exact_train_ic(ic: IIDInterruptedClassifier, testing_states, all_data, log_probs, log_post_dist, log_prior_dist,
+def exact_train_ic(ic: IIDInterruptedClassifier, testing_states, all_data, log_joint,
                    num_ratios=20):
     """
     Train the interrupted classifier using the exact chances of the data occurring.
@@ -26,21 +27,18 @@ def exact_train_ic(ic: IIDInterruptedClassifier, testing_states, all_data, log_p
             all_data,
             testing_states,
         )
-        iep = InterruptedExactPostprocessor(
-            log_probs,
-            log_post_dist,
-            log_prior_dist,
+        iep = ExactPostprocessor(
+            log_joint,
             testing_states,
             interrupted_results,
         )
-        rates = iep.misclassification_rates()
-        misclass_rates[j] = rates.average
+        misclass_rates[j] = iep.log_misclassification_rate()
     min_rate = misclass_rates.min(-1)
     ic.ratio = spaced_ratios[min_rate.indices]
     return min_rate.values
 
 
-def train_ic(ic: IIDInterruptedClassifier, testing_states, training_data, ground_truth, total_num_states, num_ratios=20):
+def train_ic(ic: IIDInterruptedClassifier, testing_states, training_data, ground_truth, num_ratios=20):
     """
     :param bayes_perm_hmm.interrupted.InterruptedClassifier ic: the InterruptedClassifier to train.
     :param training_data: data to train on
@@ -50,17 +48,15 @@ def train_ic(ic: IIDInterruptedClassifier, testing_states, training_data, ground
     """
     spaced_ratios = torch.arange(num_ratios, dtype=torch.float)
     misclass_rates = torch.zeros(num_ratios, dtype=torch.float)
-    interrupted_results = ic.classify(training_data, testing_states)
     for j in range(num_ratios):
         ic.ratio = spaced_ratios[j]
         interrupted_results = ic.classify(
             training_data,
             testing_states,
         )
-        iep = InterruptedEmpiricalPostprocessor(
+        iep = EmpiricalPostprocessor(
             ground_truth,
             testing_states,
-            total_num_states,
             interrupted_results,
         )
         rates = iep.misclassification_rates()
@@ -96,15 +92,15 @@ def train_binary(bin_ic: IIDBinaryIntClassifier, training_data, actually_bright,
             "Training data must have shape (num_samples, max_t)") from e
     ratios = torch.arange(num_ratios, dtype=torch.float)
     rates = torch.empty((num_ratios, num_ratios), dtype=torch.float)
+    ground_truth = actually_bright.int()
     for i in range(len(ratios)):
         for j in range(len(ratios)):
             bin_ic.bright_ratio = ratios[i]
             bin_ic.dark_ratio = ratios[j]
             interrupted_results = bin_ic.classify(training_data, torch.arange(2), verbosity=0)
-            iep = InterruptedEmpiricalPostprocessor(
-                actually_bright,
+            iep = EmpiricalPostprocessor(
+                ground_truth,
                 torch.arange(2),
-                2,
                 interrupted_results,
             )
             rates_and_intervals = iep.misclassification_rates()

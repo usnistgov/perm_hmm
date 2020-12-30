@@ -64,6 +64,8 @@ def clopper_pearson(alpha, num_successes, total_trials):
 def log_zero_one(state: torch.Tensor, classification: torch.Tensor):
     loss = classification.unsqueeze(-2) != state.unsqueeze(-1)
     floss = loss.float()
+    floss[~loss] = ZERO
+    return floss.log()
 
 
 class ExactPostprocessor(object):
@@ -75,64 +77,57 @@ class ExactPostprocessor(object):
         :py:class:`PostDistExactPostprocessor`
     """
 
-    def __init__(self, log_joint, testing_states, classifications=None, score=None):
+    def __init__(self, log_joint, testing_states, classifications, score=None):
         """
         :param torch.Tensor log_joint:
         :param testing_states:
         :param classifications:
         :param score:
         """
-        self.log_joint = log_joint
+        if not len(classifications.shape) == 1:
+            raise ValueError("Classifications do not have the right shape")
+        if not len(log_joint.shape) == 2:
+            raise ValueError("log_joint does not have the right shape.")
+        if not log_joint.shape[-1] == classifications.shape[-1]:
+            raise ValueError("Classifications should have same shape as log_joint.")
+        if (score is not None) and (score.shape != classifications):
+            raise ValueError("Score should have same shape as classifications.")
+        if not log_joint[testing_states].logsumexp(-1).logsumexp(-1).isclose(torch.tensor(0.), atol=5e-7):
+            raise ValueError("Prior has weight outside of testing_states")
+        if not set(classifications.unique().tolist()).issubset(set(testing_states.tolist())):
+            raise ValueError("Not all elements of self.classifications are"
+                             " elements of testing_states.")
+        if not (testing_states.unique().sort().values == testing_states.sort().values).all():
+            raise ValueError("testing_states must be unique")
         self.testing_states = testing_states
-        self.log_data_given_state = \
-            self.log_post_dist + self.log_prob.unsqueeze(-1) - \
-            self.log_prior_dist.unsqueeze(-2)
+        self.log_joint = log_joint
         self.classifications = classifications
         self.score = score
 
-    def risk(self, log_loss):
-        pass
+    def log_risk(self, log_loss):
+        ll = log_loss(self.testing_states, self.classifications)
+        return (self.log_joint[self.testing_states] + ll).logsumexp(-1).logsumexp(-1)
 
-    def misclassification_rates(self) -> AllRates:
-        """
-        Computes the misclassification rates.
+    def log_misclassification_rate(self):
+        return self.log_risk(log_zero_one)
 
-        :returns: A :py:class:`AllRates`, containing
+    def log_confusion_matrix(self):
+        subset_log_joint = self.log_joint[self.testing_states]
+        log_prior = subset_log_joint.logsumexp(-1)
+        if (log_prior.exp() < 5e-7).any():
+            raise UserWarning("Not enough weight on self.testing_states, numerical results will be unreliable")
+        log_total = log_prior.logsumexp(-1)
+        subset_log_joint -= log_total
+        log_data_given_state = subset_log_joint - log_prior.unsqueeze(-1)
+        one_hot = self.testing_states.unsqueeze(-1) == self.classifications
+        f_one_hot = one_hot.float()
+        f_one_hot[~one_hot] = ZERO
+        log_one_hot = f_one_hot.log()
+        log_confusion_rates = (log_data_given_state.unsqueeze(-2) + \
+            log_one_hot.unsqueeze(-3)).logsumexp(-1)
+        return log_confusion_rates
 
-            .confusions: The tensor the probability of inferring state i given
-                the state was j, where the state which is conditioned on is the
-                -2 dimension.
-
-            .average: The tensor containing the average misclassification rate,
-                averaged over the initial state probability distribution.
-
-        :raises NotImplementedError: if the variables `classified_dark` and
-            `classified_bright` are not defined in the instance subclass init.
-        """
-        if self.classifications is None:
-            raise NotImplementedError(
-                "Must define the classifications in the subclass init."
-            )
-        masks = self.testing_states == self.classifications.unsqueeze(-1)
-        fmasks = masks.float()
-        fmasks[~masks] = ZERO
-        bool_not_eye = ~torch.eye(len(self.testing_states), dtype=bool)
-        f_not_eye = bool_not_eye.float()
-        f_not_eye[~bool_not_eye] = ZERO
-        log_confusion_rates = (self.log_data_given_state[:, self.testing_states].unsqueeze(-1) + \
-            fmasks.log().unsqueeze(-2)).logsumexp(-3)
-        log_average_rate = (self.log_prior_dist[self.testing_states].unsqueeze(-1) + \
-            log_confusion_rates + f_not_eye.log()).logsumexp(-2).logsumexp(-1)
-        total_num_states = self.log_prior_dist.shape[-1]
-        confusion_rates = torch.full(self.classifications.shape[:-1] + (total_num_states, total_num_states), ZERO)
-        confusion_rates[(...,) + torch.meshgrid(self.testing_states, self.testing_states)] = log_confusion_rates.exp()
-        average_rate = log_average_rate.exp()
-        return AllRates(
-            confusion_rates,
-            average_rate,
-        )
-
-    def postselected_misclassification(self, prob_to_keep):
+    def postselected_misclassification_rate(self, log_prob_to_keep):
         """
         Given a total probability to keep, gives the misclassification rate of
         the model restricted to the domain containing that probability with the
@@ -172,33 +167,28 @@ class ExactPostprocessor(object):
 
         :raises ValueError: if you try to throw away all the data.
         """
-        prob = self.log_prob.exp()
+        log_prob = self.log_joint.logsumexp(-1)
         enum_prob_score = sorted(
-            enumerate(zip(prob, self.score)),
+            enumerate(zip(log_prob, self.score)),
             key=lambda x: x[1][1],
         )
         enum = torch.tensor([tup[0] for tup in enum_prob_score])
-        sort_prob = torch.tensor([tup[1][0] for tup in enum_prob_score])
-        throw = (sort_prob.cumsum(-1) < 1 - prob_to_keep)
+        sort_log_prob = torch.tensor([tup[1][0] for tup in enum_prob_score])
+        throw = (sort_log_prob.logsumexp(-1) < (1 - log_prob_to_keep.exp()).log())
         if not throw.any():
             boundary = -1
         else:
             boundary = throw.nonzero().squeeze().max()
-        if boundary == len(prob):
+        if boundary == len(log_prob):
             raise ValueError("Can't throw away all the data.")
-        boundary_onehot = torch.zeros(len(prob), dtype=bool)
+        boundary_onehot = torch.zeros(len(log_prob), dtype=bool)
         boundary_onehot[boundary + 1] = True
         mask = (~(throw | boundary_onehot))[enum.argsort()]
-        kept_prob = prob[mask].sum()
-        most_rates = self.postselect(mask).misclassification_rates()
+        kept_log_prob = log_prob[mask].logsumexp(-1)
+        log_most_rate = self.postselect(mask).log_misclassification_rate()
         b_mask = boundary_onehot[enum.argsort()]
-        b_rates = self.postselect(b_mask).misclassification_rates()
-        return AllRates(
-            *[
-                (kept_prob * r1 + (prob_to_keep - kept_prob) * r2)/prob_to_keep
-                for r1, r2 in zip(most_rates, b_rates)
-            ]
-        )
+        log_b_rate = self.postselect(b_mask).log_misclassification_rate()
+        return torch.from_numpy(np.logaddexp((kept_log_prob + log_most_rate).numpy(), (log_prob_to_keep.exp()-kept_log_prob.exp()).log() + log_b_rate)) - log_prob_to_keep
 
     def postselection_mask(self, threshold_score):
         """
@@ -225,7 +215,16 @@ class ExactPostprocessor(object):
         :returns: ExactPostprocessor, or subclass thereof. A postselected
             version of self.
         """
-        raise NotImplementedError
+        if (~postselect_mask).all():
+            raise ValueError("Can't throw out all the data.")
+        p_log_joint = self.log_joint[:, postselect_mask]
+        p_log_joint -= p_log_joint.logsumexp(-1).logsumexp(-1)
+        if self.score is not None:
+            p_score = self.score[postselect_mask]
+        else:
+            p_score = None
+        p_classifications = self.classifications[postselect_mask]
+        return ExactPostprocessor(p_log_joint, p_classifications, p_score)
 
 
 class EmpiricalPostprocessor(object):
@@ -234,7 +233,7 @@ class EmpiricalPostprocessor(object):
     simulation to compute the approximate misclassification rate of a model.
     """
 
-    def __init__(self, ground_truth, testing_states, total_num_states, classifications=None, score=None):
+    def __init__(self, ground_truth, testing_states, classifications, score=None):
         """
         The minimal things which are needed to produce misclassification rates.
         Requires that classified_bright and classified_dark are specified in a
@@ -243,6 +242,11 @@ class EmpiricalPostprocessor(object):
         :param torch.Tensor ground_truth: Indicates which runs were generated
         from which initial state.
         """
+        if not (testing_states.unique().sort().values == testing_states.sort().values).all():
+            raise ValueError("testing_states must be unique")
+        total_truths = (ground_truth.unsqueeze(-1) == testing_states).sum(-2)
+        if (total_truths == 0).any():
+            raise ValueError("There are some states for which there are no runs which realized them. Try a bigger sample size.")
         self.ground_truth = ground_truth
         """
         A :py:class:`torch.Tensor` indicating which runs were generated by which
@@ -269,7 +273,6 @@ class EmpiricalPostprocessor(object):
         A :py:class:`torch.Tensor`, 
         containing the indices of the states to test for.
         """
-        self.total_num_states = total_num_states
 
     def postselection_percentage_mask(self, prob_to_keep):
         if self.score is None:
@@ -311,10 +314,6 @@ class EmpiricalPostprocessor(object):
         :raises NotImplementedError: if the parameters `classified_bright` or
             `classified_dark` were not specified in the subclass init.
         """
-        if self.classifications is None:
-            raise NotImplementedError("classified_bright or classified_dark"
-                                      "is None. Were these specified in the"
-                                      "subclass init?")
         all_pairs = torch.stack(
             tuple(reversed(torch.meshgrid(self.testing_states, self.testing_states)))).T
         ground_truth, classifications = torch.broadcast_tensors(self.ground_truth, self.classifications)
@@ -322,22 +321,13 @@ class EmpiricalPostprocessor(object):
             (ground_truth, classifications),
             dim=-1,
         ).unsqueeze(-2).unsqueeze(-2)).all(-1).sum(-3)
-        total_truths = (self.ground_truth.unsqueeze(-1) == self.testing_states).sum(-2)
-        if (total_truths == 0).any():
-            raise ValueError("There are some states for which there are no runs which realized them. Try a bigger sample size.")
+        total_truths = (ground_truth.unsqueeze(-1) == self.testing_states).sum(-2)
         confusion_rates = confusions / total_truths.unsqueeze(-1).float()
         rstates = torch.arange(len(self.testing_states))
         total_misclassifications = (total_truths - confusions[..., rstates, rstates]).sum(-1)
         avg_misclassification_rate = total_misclassifications.float() / total_truths.sum(-1)
         conf_ints = clopper_pearson(1-confidence_level, confusions, total_truths.unsqueeze(-1))
         avg_conf_int = clopper_pearson(1-confidence_level, total_misclassifications, total_truths.sum(-1))
-        total_num_states = self.total_num_states
-        tmp = torch.zeros(self.classifications.shape[:-1] + (total_num_states, total_num_states))
-        tmp[(...,) + torch.meshgrid(self.testing_states, self.testing_states)] = confusion_rates
-        confusion_rates = tmp
-        tmp = torch.zeros((2,) + self.classifications.shape[:-1] + (total_num_states, total_num_states))
-        tmp[(...,) + torch.meshgrid(self.testing_states, self.testing_states)] = conf_ints.float()
-        conf_ints = tmp
         return AllRatesWithIntervals(
             RateWithInterval(confusion_rates, conf_ints),
             RateWithInterval(avg_misclassification_rate, avg_conf_int),
@@ -356,4 +346,15 @@ class EmpiricalPostprocessor(object):
         :returns: EmpiricalPostprocessor, or subclass thereof. A postselected
             version of self.
         """
-        raise NotImplementedError
+        if (~postselection_mask).all():
+            raise ValueError("Can't throw out all the data.")
+        if self.score is None:
+            p_score = self.score
+        else:
+            p_score = self.score[postselection_mask]
+        return EmpiricalPostprocessor(
+            self.ground_truth[postselection_mask],
+            self.testing_states,
+            self.classifications[postselection_mask],
+            p_score,
+        )
