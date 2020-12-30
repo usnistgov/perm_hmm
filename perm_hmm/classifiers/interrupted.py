@@ -8,7 +8,6 @@ which "collects enough evidence".
 
 import torch
 from perm_hmm.util import first_nonzero, indices
-from perm_hmm.return_types import ClassBreakRatio
 from perm_hmm.classifiers.generic_classifiers import Classifier
 
 
@@ -57,11 +56,11 @@ class IIDInterruptedClassifier(Classifier):
         if not verbosity:
             return classifications
         else:
-            return ClassBreakRatio(
-                classifications,
-                breaks.any(-1),
-                sort_lrs[..., -1],
-            )
+            return {
+                b"classifications": classifications,
+                b"break_flag": breaks.any(-1),
+                b"log_like_ratio": sort_lrs[..., -1],
+            }
 
 
 class IIDBinaryIntClassifier(Classifier):
@@ -105,10 +104,10 @@ class IIDBinaryIntClassifier(Classifier):
             (both_break & bright_first) | \
             (neither_break & bright_most_likely)
         if not verbosity:
-            return classified_bright
+            return classified_bright.int()
         else:
-            return ClassBreakRatio(
-                classified_bright,
-                break_flag,
-                intermediate_lr[..., -1],
-            )
+            return {
+                b"classifications": classified_bright.int(),
+                b"break_flag": break_flag,
+                b"log_like_ratio": intermediate_lr[..., -1],
+            }

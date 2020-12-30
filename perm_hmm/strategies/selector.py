@@ -2,7 +2,6 @@ import torch
 from operator import mul
 from functools import reduce
 from functools import wraps
-from perm_hmm.return_types import PermWithHistory
 
 
 

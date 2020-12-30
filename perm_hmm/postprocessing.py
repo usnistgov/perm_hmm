@@ -8,8 +8,6 @@ import torch
 from scipy.stats import beta
 
 import perm_hmm.return_types
-from perm_hmm.return_types import RateWithInterval, \
-    AllRatesWithIntervals, AllRates
 from perm_hmm.util import entropy
 import perm_hmm.classifiers.interrupted
 from perm_hmm.util import ZERO
