@@ -6,7 +6,7 @@ methods, to compare the resulting error rates.
 import torch
 
 from perm_hmm.util import num_to_data
-from perm_hmm.postprocessing.postprocessing import ExactPostprocessor, EmpiricalPostprocessor
+from perm_hmm.postprocessing import ExactPostprocessor, EmpiricalPostprocessor
 from perm_hmm.classifiers.perm_classifier import PermClassifier
 
 
@@ -31,19 +31,7 @@ class HMMSimulator(object):
         The model whose misclassification rates we wish to analyze.
         """
 
-    def check_states(self, testing_states):
-        num_states = len(self.phmm.initial_logits)
-        lts = testing_states.tolist()
-        sts = set(lts)
-        if not len(sts) == len(lts):
-            raise ValueError("States to test for must be unique.")
-        if len(lts) <= 1:
-            raise ValueError("Must attempt to discriminate between at least two"
-                             "states.")
-        if not set(testing_states.tolist()).issubset(range(num_states)):
-            raise ValueError("States to test for must be states of the model.")
-
-    def all_classifications(self, num_bins, testing_states, classifier=None, perm_selector=None, verbosity=0):
+    def all_classifications(self, num_bins, classifier=None, perm_selector=None, verbosity=0):
         """
         Computes the data required to compute the exact misclassification rates
         of the three models under consideration, the HMM with permtuations,
@@ -69,7 +57,6 @@ class HMMSimulator(object):
             :py:meth:`BernoulliSimulator._exact_single_run`
             for details on members.
         """
-        self.check_states(testing_states)
         base = len(self.phmm.observation_dist.enumerate_support())
         data = torch.stack(
             [num_to_data(num, num_bins, base) for num in range(base**num_bins)]
@@ -85,10 +72,10 @@ class HMMSimulator(object):
             perms = perm_selector.get_perms(data, -1)
             if save_history:
                 history = perm_selector.history
-            classi_dict = classifier.classify(data, testing_states, perms=perms, verbosity=verbosity)
+            classi_dict = classifier.classify(data, perms=perms, verbosity=verbosity)
         else:
             perms = None
-            classi_dict = classifier.classify(data, testing_states, verbosity=verbosity)
+            classi_dict = classifier.classify(data, verbosity=verbosity)
         if verbosity:
             classifications = classi_dict[b"classifications"]
             if save_history:
@@ -100,15 +87,13 @@ class HMMSimulator(object):
         log_joint = dist.T + lp
         ep = ExactPostprocessor(
             log_joint,
-            testing_states,
             classifications,
         )
         if verbosity:
             return ep, classi_dict
         return ep
 
-    def simulate(self, num_bins, num_samples, testing_states, classifier=None, perm_selector=None, verbosity=0):
-        self.check_states(testing_states)
+    def simulate(self, num_bins, num_samples, classifier=None, perm_selector=None, verbosity=0):
         if verbosity > 1:
             save_history = True
         else:
@@ -126,9 +111,9 @@ class HMMSimulator(object):
         if classifier is None:
             classifier = PermClassifier(self.phmm)
         if perms is not None:
-            classi_dict = classifier.classify(data, testing_states, perms=perms, verbosity=verbosity)
+            classi_dict = classifier.classify(data, perms=perms, verbosity=verbosity)
         else:
-            classi_dict = classifier.classify(data, testing_states, verbosity=verbosity)
+            classi_dict = classifier.classify(data, verbosity=verbosity)
         if verbosity:
             classifications = classi_dict[b"classifications"]
             classi_dict[b"data"] = data
@@ -138,7 +123,6 @@ class HMMSimulator(object):
             classifications = classi_dict
         ep = EmpiricalPostprocessor(
             output.states[..., 0],
-            testing_states,
             classifications,
         )
         if verbosity:

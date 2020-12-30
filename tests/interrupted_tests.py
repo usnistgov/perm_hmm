@@ -3,7 +3,7 @@ import torch
 import pyro.distributions as dist
 from perm_hmm.classifiers.interrupted import IIDInterruptedClassifier
 from perm_hmm.models.hmms import DiscreteHMM, PermutedDiscreteHMM
-from perm_hmm.postprocessing.postprocessing import ExactPostprocessor, EmpiricalPostprocessor
+from perm_hmm.postprocessing import ExactPostprocessor, EmpiricalPostprocessor
 import perm_hmm.training.interrupted_training
 from perm_hmm.util import transpositions, num_to_data, ZERO
 from perm_hmm.strategies.min_ent import MinEntropySelector

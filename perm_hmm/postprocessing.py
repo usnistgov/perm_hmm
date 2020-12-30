@@ -1,6 +1,7 @@
 """
 Classes to be used for postprocessing data after a simulation.
 """
+import warnings
 
 import numpy as np
 import torch
@@ -61,11 +62,15 @@ def clopper_pearson(alpha, num_successes, total_trials):
     return torch.stack((torch.from_numpy(lower), torch.from_numpy(upper)))
 
 
-def log_zero_one(state: torch.Tensor, classification: torch.Tensor):
-    loss = classification.unsqueeze(-2) != state.unsqueeze(-1)
+def log_zero_one(state, classification):
+    loss = classification != state
     floss = loss.float()
     floss[~loss] = ZERO
     return floss.log()
+
+
+def zero_one(state, classification):
+    return classification != state
 
 
 class ExactPostprocessor(object):
@@ -77,10 +82,9 @@ class ExactPostprocessor(object):
         :py:class:`PostDistExactPostprocessor`
     """
 
-    def __init__(self, log_joint, testing_states, classifications, score=None):
+    def __init__(self, log_joint, classifications, score=None):
         """
         :param torch.Tensor log_joint:
-        :param testing_states:
         :param classifications:
         :param score:
         """
@@ -92,39 +96,33 @@ class ExactPostprocessor(object):
             raise ValueError("Classifications should have same shape as log_joint.")
         if (score is not None) and (score.shape != classifications):
             raise ValueError("Score should have same shape as classifications.")
-        if not log_joint[testing_states].logsumexp(-1).logsumexp(-1).isclose(torch.tensor(0.), atol=5e-7):
-            raise ValueError("Prior has weight outside of testing_states")
-        if not set(classifications.unique().tolist()).issubset(set(testing_states.tolist())):
-            raise ValueError("Not all elements of self.classifications are"
-                             " elements of testing_states.")
-        if not (testing_states.unique().sort().values == testing_states.sort().values).all():
-            raise ValueError("testing_states must be unique")
-        self.testing_states = testing_states
         self.log_joint = log_joint
         self.classifications = classifications
         self.score = score
 
     def log_risk(self, log_loss):
-        ll = log_loss(self.testing_states, self.classifications)
-        return (self.log_joint[self.testing_states] + ll).logsumexp(-1).logsumexp(-1)
+        states = torch.arange(self.log_joint.shape[-2])
+        ll = log_loss(states.unsqueeze(-1), self.classifications.unsqueeze(-2))
+        return (self.log_joint + ll).logsumexp(-1).logsumexp(-1)
 
     def log_misclassification_rate(self):
         return self.log_risk(log_zero_one)
 
     def log_confusion_matrix(self):
-        subset_log_joint = self.log_joint[self.testing_states]
-        log_prior = subset_log_joint.logsumexp(-1)
-        if (log_prior.exp() < 5e-7).any():
-            raise UserWarning("Not enough weight on self.testing_states, numerical results will be unreliable")
-        log_total = log_prior.logsumexp(-1)
-        subset_log_joint -= log_total
-        log_data_given_state = subset_log_joint - log_prior.unsqueeze(-1)
-        one_hot = self.testing_states.unsqueeze(-1) == self.classifications
+        log_prior = self.log_joint.logsumexp(-1)
+        nonzero_prior = log_prior > 1e-6
+        if not nonzero_prior.all():
+            warnings.warn("Not all states have nonzero prior, there will be "
+                          "NaNs in the confusion matrix.")
+        possible_class = torch.arange(self.classifications.max())
+        log_data_given_state = self.log_joint - log_prior.unsqueeze(-1)
+        one_hot = possible_class.unsqueeze(-1) == self.classifications
         f_one_hot = one_hot.float()
         f_one_hot[~one_hot] = ZERO
         log_one_hot = f_one_hot.log()
         log_confusion_rates = (log_data_given_state.unsqueeze(-2) + \
             log_one_hot.unsqueeze(-3)).logsumexp(-1)
+        log_confusion_rates[~nonzero_prior] = torch.tensor(float('NaN'))
         return log_confusion_rates
 
     def postselected_misclassification_rate(self, log_prob_to_keep):
@@ -233,7 +231,7 @@ class EmpiricalPostprocessor(object):
     simulation to compute the approximate misclassification rate of a model.
     """
 
-    def __init__(self, ground_truth, testing_states, classifications, score=None):
+    def __init__(self, ground_truth, classifications, score=None):
         """
         The minimal things which are needed to produce misclassification rates.
         Requires that classified_bright and classified_dark are specified in a
@@ -242,11 +240,6 @@ class EmpiricalPostprocessor(object):
         :param torch.Tensor ground_truth: Indicates which runs were generated
         from which initial state.
         """
-        if not (testing_states.unique().sort().values == testing_states.sort().values).all():
-            raise ValueError("testing_states must be unique")
-        total_truths = (ground_truth.unsqueeze(-1) == testing_states).sum(-2)
-        if (total_truths == 0).any():
-            raise ValueError("There are some states for which there are no runs which realized them. Try a bigger sample size.")
         self.ground_truth = ground_truth
         """
         A :py:class:`torch.Tensor` indicating which runs were generated by which
@@ -267,11 +260,6 @@ class EmpiricalPostprocessor(object):
         Used for postselection.
         
             shape ``(n_runs,)``
-        """
-        self.testing_states = testing_states
-        """
-        A :py:class:`torch.Tensor`, 
-        containing the indices of the states to test for.
         """
 
     def postselection_percentage_mask(self, prob_to_keep):
@@ -297,41 +285,42 @@ class EmpiricalPostprocessor(object):
         """
         return self.score > threshold_score
 
-    def misclassification_rates(self, confidence_level=.95):
-        """
-        Given the actual inference for each run and the ground truth, computes
-        the empirical misclassification rates with confidence intervals.
+    def risk(self, loss):
+        return loss(self.ground_truth, self.classifications).sum(-1) / self.classifications.shape[-1]
 
-        :param float confidence_level: Indicates the confidence level to
-            compute the confidence intervals at.
+    def misclassification_rate(self, confidence_level=.95):
+        rate = self.risk(zero_one)
+        total = torch.tensor(self.classifications.shape[-1])
+        num_misses = (self.ground_truth != self.classifications).sum(-1)
+        interval = clopper_pearson(1-confidence_level, num_misses, total)
+        return {b"rate": rate, b"lower": interval[0], b"upper": interval[1]}
 
-        :returns: A :py:class:`AllRatesWithIntervals` object, containing
-            .false_positive, .false_negative, and .average, which are each
-            :py:class:`RateWithInterval` objects containing the
-            corresponding misclassification rate along with its confidence
-            interval, all at the same level.
-
-        :raises NotImplementedError: if the parameters `classified_bright` or
-            `classified_dark` were not specified in the subclass init.
-        """
-        all_pairs = torch.stack(
-            tuple(reversed(torch.meshgrid(self.testing_states, self.testing_states)))).T
-        ground_truth, classifications = torch.broadcast_tensors(self.ground_truth, self.classifications)
-        confusions = (all_pairs == torch.stack(
-            (ground_truth, classifications),
-            dim=-1,
-        ).unsqueeze(-2).unsqueeze(-2)).all(-1).sum(-3)
-        total_truths = (ground_truth.unsqueeze(-1) == self.testing_states).sum(-2)
-        confusion_rates = confusions / total_truths.unsqueeze(-1).float()
-        rstates = torch.arange(len(self.testing_states))
-        total_misclassifications = (total_truths - confusions[..., rstates, rstates]).sum(-1)
-        avg_misclassification_rate = total_misclassifications.float() / total_truths.sum(-1)
-        conf_ints = clopper_pearson(1-confidence_level, confusions, total_truths.unsqueeze(-1))
-        avg_conf_int = clopper_pearson(1-confidence_level, total_misclassifications, total_truths.sum(-1))
-        return AllRatesWithIntervals(
-            RateWithInterval(confusion_rates, conf_ints),
-            RateWithInterval(avg_misclassification_rate, avg_conf_int),
-        )
+    def confusion_matrix(self, confidence_level=.95):
+        from rpy2.robjects.packages import importr
+        from rpy2.robjects import FloatVector
+        multinomial_ci = importr("MultinomialCI")
+        possible_class = torch.arange(self.classifications.max())
+        lower = torch.empty((self.ground_truth.max(), self.classifications.max()))
+        upper = torch.empty((self.ground_truth.max(), self.classifications.max()))
+        rate = torch.empty((self.ground_truth.max(), self.classifications.max()))
+        for i in range(self.ground_truth.max()):
+            if (self.ground_truth == i).any():
+                classi = self.classifications[self.ground_truth == i]
+                counts = (classi == possible_class.unsqueeze(-1)).sum(-1)
+                frequencies = counts / counts.sum(-1)
+                vec = FloatVector(counts)
+                ci = multinomial_ci.multinomialCI(vec, 1-confidence_level)
+                ci = torch.from_numpy(np.array(ci))
+                lower[i] = ci[:, 0]
+                upper[i] = ci[:, 1]
+                rate[i] = frequencies
+            else:
+                warnings.warn("No instances of state {} in ground truth, there"
+                              "will be NaNs in confusion matrix.")
+                lower[i] = torch.tensor(float('NaN'))
+                upper[i] = torch.tensor(float('NaN'))
+                rate[i] = torch.tensor(float('NaN'))
+        return {b"rate": rate, b"lower": lower, b"upper": upper}
 
     def postselect(self, postselection_mask):
         """
@@ -354,7 +343,6 @@ class EmpiricalPostprocessor(object):
             p_score = self.score[postselection_mask]
         return EmpiricalPostprocessor(
             self.ground_truth[postselection_mask],
-            self.testing_states,
             self.classifications[postselection_mask],
             p_score,
         )

@@ -38,14 +38,14 @@ class IIDInterruptedClassifier(Classifier):
         self.dist = dist
         self.ratio = ratio
 
-    def classify(self, data, testing_states, verbosity=0):
+    def classify(self, data, verbosity=0):
         shape = data.shape
         if shape == ():
             data = data.expand(1, 1)
         elif len(shape) == 1:
             data = data.expand(1, -1)
         data = data.float()
-        intermediate_lps = self.dist.log_prob(data.unsqueeze(-1))[..., testing_states].cumsum(dim=-2).float()
+        intermediate_lps = self.dist.log_prob(data.unsqueeze(-1)).cumsum(dim=-2).float()
         sort_lps, sort_inds = torch.sort(intermediate_lps, -1)
         sort_lrs = sort_lps[..., -1] - sort_lps[..., -2]
         breaks = sort_lrs.view((1,)*len(self.ratio.shape) + sort_lrs.shape) > self.ratio.view(self.ratio.shape + (1,)*len(sort_lrs.shape))
@@ -54,7 +54,6 @@ class IIDInterruptedClassifier(Classifier):
         _, sort_inds = torch.broadcast_tensors(breaks.unsqueeze(-1), sort_inds)
         classifications = sort_inds[..., -1, -1]
         classifications[first_breaks >= 0] = sort_inds[ix + (first_breaks, torch.zeros_like(first_breaks, dtype=int))][first_breaks >= 0]
-        classifications = testing_states[classifications]
         if not verbosity:
             return classifications
         else:
@@ -73,7 +72,7 @@ class IIDBinaryIntClassifier(Classifier):
         self.bright_ratio = bright_ratio
         self.dark_ratio = dark_ratio
 
-    def classify(self, data, testing_states, verbosity=0):
+    def classify(self, data, verbosity=0):
         shape = data.shape
         if shape == ():
             data = data.expand(1, 1)
