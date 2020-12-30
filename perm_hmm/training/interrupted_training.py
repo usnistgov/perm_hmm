@@ -4,7 +4,7 @@ from perm_hmm.classifiers.interrupted import IIDBinaryIntClassifier, IIDInterrup
 from perm_hmm.postprocessing import ExactPostprocessor, EmpiricalPostprocessor
 
 
-def exact_train_ic(ic: IIDInterruptedClassifier, testing_states, all_data, log_joint,
+def exact_train_ic(ic: IIDInterruptedClassifier, all_data, log_joint,
                    num_ratios=20):
     """
     Train the interrupted classifier using the exact chances of the data occurring.
@@ -25,11 +25,9 @@ def exact_train_ic(ic: IIDInterruptedClassifier, testing_states, all_data, log_j
         ic.ratio = spaced_ratios[j]
         interrupted_results = ic.classify(
             all_data,
-            testing_states,
         )
         iep = ExactPostprocessor(
             log_joint,
-            testing_states,
             interrupted_results,
         )
         misclass_rates[j] = iep.log_misclassification_rate()
@@ -38,7 +36,7 @@ def exact_train_ic(ic: IIDInterruptedClassifier, testing_states, all_data, log_j
     return min_rate.values
 
 
-def train_ic(ic: IIDInterruptedClassifier, testing_states, training_data, ground_truth, num_ratios=20):
+def train_ic(ic: IIDInterruptedClassifier, training_data, ground_truth, num_ratios=20):
     """
     :param bayes_perm_hmm.interrupted.InterruptedClassifier ic: the InterruptedClassifier to train.
     :param training_data: data to train on
@@ -52,15 +50,13 @@ def train_ic(ic: IIDInterruptedClassifier, testing_states, training_data, ground
         ic.ratio = spaced_ratios[j]
         interrupted_results = ic.classify(
             training_data,
-            testing_states,
         )
         iep = EmpiricalPostprocessor(
             ground_truth,
-            testing_states,
             interrupted_results,
         )
-        rates = iep.misclassification_rates()
-        misclass_rates[j] = rates.average.rate
+        rates = iep.misclassification_rate()
+        misclass_rates[j] = rates[b"rate"]
     min_rate = misclass_rates.min(-1)
     ic.ratio = spaced_ratios[min_rate.indices]
     return min_rate.values
@@ -103,13 +99,13 @@ def train_binary_ic(bin_ic: IIDBinaryIntClassifier, training_data, actually_brig
                 torch.arange(2),
                 interrupted_results,
             )
-            rates_and_intervals = iep.misclassification_rates()
-            rates[i, j] = rates_and_intervals.average.rate
+            rate_and_interval = iep.misclassification_rates()
+            rates[i, j] = rate_and_interval[b"rate"]
     ind = divmod(rates.argmin().item(), rates.shape[1])
     bin_ic.bright_ratio = ind[0]
     bin_ic.dark_ratio = ind[1]
 
-def exact_train_binary_ic(bin_ic: IIDBinaryIntClassifier, all_data, testing_states, log_joint, num_ratios=20):
+def exact_train_binary_ic(bin_ic: IIDBinaryIntClassifier, all_data, log_joint, num_ratios=20):
     """
     Trains the classifier. This is to find the optimal likelihood ratio
     thresholds to minimize classification error.
@@ -137,11 +133,9 @@ def exact_train_binary_ic(bin_ic: IIDBinaryIntClassifier, all_data, testing_stat
             bin_ic.dark_ratio = ratios[j]
             interrupted_results = bin_ic.classify(
                 all_data,
-                testing_states,
             ).int()
             iep = ExactPostprocessor(
                 log_joint,
-                testing_states,
                 interrupted_results,
             )
             rates[i, j] = iep.log_misclassification_rate()

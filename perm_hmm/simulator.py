@@ -105,8 +105,10 @@ class HMMSimulator(object):
             perms = perm_selector.perm_history
         else:
             perms = None
-        if save_history and (perm_selector is not None):
-            history = perm_selector.calc_history
+        history = None
+        if save_history:
+            if perm_selector is not None:
+                history = perm_selector.calc_history
         data = output.observations
         if classifier is None:
             classifier = PermClassifier(self.phmm)
@@ -117,7 +119,7 @@ class HMMSimulator(object):
         if verbosity:
             classifications = classi_dict[b"classifications"]
             classi_dict[b"data"] = data
-            if save_history:
+            if history is not None:
                 classi_dict[b"history"] = history
         else:
             classifications = classi_dict

@@ -64,7 +64,9 @@ def log_zero_one(state, classification):
     loss = classification != state
     floss = loss.float()
     floss[~loss] = ZERO
-    return floss.log()
+    log_loss = floss.log()
+    log_loss[~loss] = 2*log_loss[~loss]
+    return log_loss
 
 
 def zero_one(state, classification):
@@ -108,16 +110,17 @@ class ExactPostprocessor(object):
 
     def log_confusion_matrix(self):
         log_prior = self.log_joint.logsumexp(-1)
-        nonzero_prior = log_prior > 1e-6
+        nonzero_prior = log_prior > torch.tensor(1e-6).log()
         if not nonzero_prior.all():
             warnings.warn("Not all states have nonzero prior, there will be "
                           "NaNs in the confusion matrix.")
-        possible_class = torch.arange(self.classifications.max())
+        possible_class = torch.arange(self.classifications.max()+1)
         log_data_given_state = self.log_joint - log_prior.unsqueeze(-1)
         one_hot = possible_class.unsqueeze(-1) == self.classifications
         f_one_hot = one_hot.float()
         f_one_hot[~one_hot] = ZERO
         log_one_hot = f_one_hot.log()
+        log_one_hot[~one_hot] = 2*log_one_hot[~one_hot]
         log_confusion_rates = (log_data_given_state.unsqueeze(-2) + \
             log_one_hot.unsqueeze(-3)).logsumexp(-1)
         log_confusion_rates[~nonzero_prior] = torch.tensor(float('NaN'))
@@ -284,7 +287,7 @@ class EmpiricalPostprocessor(object):
         return self.score > threshold_score
 
     def risk(self, loss):
-        return loss(self.ground_truth, self.classifications).sum(-1) / self.classifications.shape[-1]
+        return loss(self.ground_truth, self.classifications).sum(-1) / torch.tensor(self.classifications.shape[-1]).float()
 
     def misclassification_rate(self, confidence_level=.95):
         rate = self.risk(zero_one)
@@ -297,15 +300,18 @@ class EmpiricalPostprocessor(object):
         from rpy2.robjects.packages import importr
         from rpy2.robjects import FloatVector
         multinomial_ci = importr("MultinomialCI")
-        possible_class = torch.arange(self.classifications.max())
-        lower = torch.empty((self.ground_truth.max(), self.classifications.max()))
-        upper = torch.empty((self.ground_truth.max(), self.classifications.max()))
-        rate = torch.empty((self.ground_truth.max(), self.classifications.max()))
-        for i in range(self.ground_truth.max()):
-            if (self.ground_truth == i).any():
-                classi = self.classifications[self.ground_truth == i]
+        range_truth = self.ground_truth.max() + 1
+        range_class = self.classifications.max() + 1
+        possible_class = torch.arange(range_class)
+        lower = torch.empty((range_truth, range_class))
+        upper = torch.empty((range_truth, range_class))
+        rate = torch.empty((range_truth, range_class))
+        for i in range(range_truth.item()):
+            mask = self.ground_truth == i
+            if mask.any():
+                classi = self.classifications[mask]
                 counts = (classi == possible_class.unsqueeze(-1)).sum(-1)
-                frequencies = counts / counts.sum(-1)
+                frequencies = counts / mask.sum(-1).float()
                 vec = FloatVector(counts)
                 ci = multinomial_ci.multinomialCI(vec, 1-confidence_level)
                 ci = torch.from_numpy(np.array(ci))
@@ -314,7 +320,7 @@ class EmpiricalPostprocessor(object):
                 rate[i] = frequencies
             else:
                 warnings.warn("No instances of state {} in ground truth, there"
-                              "will be NaNs in confusion matrix.")
+                              "will be NaNs in confusion matrix.".format(i))
                 lower[i] = torch.tensor(float('NaN'))
                 upper[i] = torch.tensor(float('NaN'))
                 rate[i] = torch.tensor(float('NaN'))

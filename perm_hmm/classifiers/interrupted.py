@@ -56,11 +56,7 @@ class IIDInterruptedClassifier(Classifier):
         if not verbosity:
             return classifications
         else:
-            return {
-                b"classifications": classifications,
-                b"break_flag": breaks.any(-1),
-                b"log_like_ratio": sort_lrs[..., -1],
-            }
+            return classifications, {b"break_flag": breaks.any(-1), b"log_like_ratio": sort_lrs[..., -1]}
 
 
 class IIDBinaryIntClassifier(Classifier):
@@ -106,8 +102,4 @@ class IIDBinaryIntClassifier(Classifier):
         if not verbosity:
             return classified_bright.int()
         else:
-            return {
-                b"classifications": classified_bright.int(),
-                b"break_flag": break_flag,
-                b"log_like_ratio": intermediate_lr[..., -1],
-            }
+            return classified_bright.int(), {b"break_flag": break_flag, b"log_like_ratio": intermediate_lr[..., -1]}

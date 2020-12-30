@@ -13,7 +13,7 @@ import perm_hmm.physical_systems.beryllium as beryllium
 from perm_hmm.strategies.min_ent import MinEntropySelector
 
 
-def exact_rates(phmm: PermutedDiscreteHMM, testing_states, num_bins, perm_selector, classifier=None, num_ratios=20, verbosity=0):
+def exact_rates(phmm: PermutedDiscreteHMM, num_bins, perm_selector, classifier=None, num_ratios=20, verbosity=0):
     experiment_parameters = {
         b"hmm_params": {
             b"initial_logits": phmm.initial_logits,
@@ -21,7 +21,6 @@ def exact_rates(phmm: PermutedDiscreteHMM, testing_states, num_bins, perm_select
             b"observation_params": phmm.observation_dist._param,
         },
         b"possible_perms": perm_selector.possible_perms,
-        b"testing_states": testing_states,
         b"num_bins": torch.tensor(num_bins),
     }
     simulator = HMMSimulator(phmm)
@@ -35,18 +34,19 @@ def exact_rates(phmm: PermutedDiscreteHMM, testing_states, num_bins, perm_select
     ).float()
     lp = phmm.log_prob(data)
     plisd = phmm.posterior_log_initial_state_dist(data)
-    _ = exact_train_ic(ic, testing_states, data, lp, plisd, phmm.initial_logits, num_ratios=num_ratios)
-    nop = simulator.all_classifications(num_bins, testing_states, classifier=classifier, verbosity=verbosity)
-    pp = simulator.all_classifications(num_bins, testing_states, classifier=classifier, perm_selector=perm_selector, verbosity=verbosity)
+    log_joint = plisd.T + lp
+    _ = exact_train_ic(ic, data, log_joint, num_ratios=num_ratios)
+    nop = simulator.all_classifications(num_bins, classifier=classifier, verbosity=verbosity)
+    pp = simulator.all_classifications(num_bins, classifier=classifier, perm_selector=perm_selector, verbosity=verbosity)
     if verbosity:
         nop, nod = nop
         pp, pd = pp
-    i_results = ic.classify(data, testing_states, verbosity=verbosity)
+    i_results = ic.classify(data, verbosity=verbosity)
     if verbosity:
         i_classifications = i_results[0]
     else:
         i_classifications = i_results
-    ip = ExactPostprocessor(nop.log_joint, testing_states, i_classifications)
+    ip = ExactPostprocessor(nop.log_joint, i_classifications)
     i_classifications = ip.classifications
     no_classifications = nop.classifications
     p_classifications = pp.classifications
@@ -68,7 +68,7 @@ def exact_rates(phmm: PermutedDiscreteHMM, testing_states, num_bins, perm_select
         toret[b"interrupted_break_ratio"] = i_results[1:]
     return toret
 
-def empirical_rates(phmm: PermutedDiscreteHMM, testing_states, num_bins, perm_selector, classifier=None, num_ratios=20, num_train=1000, num_samples=1000, confidence=.95, verbosity=0):
+def empirical_rates(phmm: PermutedDiscreteHMM, num_bins, perm_selector, classifier=None, num_ratios=20, num_train=1000, num_samples=1000, confidence=.95, verbosity=0):
     experiment_parameters = {
         b"hmm_params": {
             b"initial_logits": phmm.initial_logits,
@@ -76,7 +76,6 @@ def empirical_rates(phmm: PermutedDiscreteHMM, testing_states, num_bins, perm_se
             b"observation_params": phmm.observation_dist._param,
         },
         b"possible_perms": perm_selector.possible_perms,
-        b"testing_states": testing_states,
         b"num_bins": torch.tensor(num_bins),
     }
     simulator = HMMSimulator(phmm)
@@ -85,24 +84,24 @@ def empirical_rates(phmm: PermutedDiscreteHMM, testing_states, num_bins, perm_se
         torch.tensor(1.),
     )
     x, training_data = phmm.sample((num_train, num_bins))
-    _ = train_ic(ic, testing_states, training_data, x[..., 0], len(phmm.initial_logits), num_ratios=num_ratios)
-    pp = simulator.simulate(num_bins, num_samples, testing_states, classifier=classifier, perm_selector=perm_selector, verbosity=verbosity)
-    nop, d = simulator.simulate(num_bins, num_samples, testing_states, classifier=classifier, verbosity=min(1, verbosity))
+    _ = train_ic(ic, training_data, x[..., 0], num_ratios=num_ratios)
+    pp = simulator.simulate(num_bins, num_samples, classifier=classifier, perm_selector=perm_selector, verbosity=verbosity)
+    nop, d = simulator.simulate(num_bins, num_samples, classifier=classifier, verbosity=max(1, verbosity))
     if verbosity:
         pp, pd = pp
-    i_results = ic.classify(d[b"data"], testing_states, verbosity=verbosity)
+    i_results = ic.classify(d[b"data"], verbosity=verbosity)
     if verbosity:
-        i_classifications = i_results[0]
+        i_classifications, i_dict = i_results
     else:
         i_classifications = i_results
-    ip = EmpiricalPostprocessor(nop.ground_truth, testing_states, i_classifications)
+    ip = EmpiricalPostprocessor(nop.ground_truth, i_classifications)
     i_classifications = ip.classifications
     no_classifications = nop.classifications
     p_classifications = pp.classifications
     toret = {
-        b"interrupted_rates": ip.misclassification_rates(confidence),
-        b"permuted_rates": pp.misclassification_rates(confidence),
-        b"unpermuted_rates": nop.misclassification_rates(confidence),
+        b"interrupted_rates": ip.misclassification_rate(confidence),
+        b"permuted_rates": pp.misclassification_rate(confidence),
+        b"unpermuted_rates": nop.misclassification_rate(confidence),
         b"interrupted_classifications": i_classifications,
         b"unpermuted_classifications": no_classifications,
         b"permuted_classifications": p_classifications,
@@ -111,7 +110,7 @@ def empirical_rates(phmm: PermutedDiscreteHMM, testing_states, num_bins, perm_se
     if verbosity:
         toret[b"unpermuted_extras"] = d
         toret[b"permuted_extras"] = pd
-        toret[b"interrupted_break_ratio"] = i_results[1:]
+        toret[b"interrupted_extras"] = i_dict
         toret[b"training_states"] = x
         toret[b"training_data"] = training_data
     return toret
@@ -126,7 +125,6 @@ def main(args):
     bright_or_dark, pij, bright_probs = \
         [torch.from_numpy(x).float()
          for x in beryllium.bernoulli_parameters(integration_time)]
-    testing_states = torch.tensor([beryllium.DARK_STATE, beryllium.BRIGHT_STATE], dtype=int)
     output_dist = dist.Bernoulli(bright_probs)
     perm_hmm = PermutedDiscreteHMM(bright_or_dark, pij.log(), output_dist)
     num_bins = args.num_bins
@@ -138,9 +136,9 @@ def main(args):
     else:
         verbosity = 0
     if args.exact:
-        d = exact_rates(perm_hmm, testing_states, num_bins, perm_selector, verbosity=verbosity)
+        d = exact_rates(perm_hmm, num_bins, perm_selector, verbosity=verbosity)
     elif args.approximate:
-        d = empirical_rates(perm_hmm, testing_states, num_bins, perm_selector, num_train=args.num_training_samples, num_samples=args.num_samples, verbosity=verbosity)
+        d = empirical_rates(perm_hmm, num_bins, perm_selector, num_train=args.num_training_samples, num_samples=args.num_samples, verbosity=verbosity)
     else:
         d = {}
     print("Done.\n")
