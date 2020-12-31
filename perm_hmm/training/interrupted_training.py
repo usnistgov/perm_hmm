@@ -93,13 +93,12 @@ def train_binary_ic(bin_ic: IIDBinaryIntClassifier, training_data, actually_brig
         for j in range(len(ratios)):
             bin_ic.bright_ratio = ratios[i]
             bin_ic.dark_ratio = ratios[j]
-            interrupted_results = bin_ic.classify(training_data, torch.arange(2), verbosity=0).int()
+            interrupted_results = bin_ic.classify(training_data, verbosity=0).int()
             iep = EmpiricalPostprocessor(
                 ground_truth,
-                torch.arange(2),
                 interrupted_results,
             )
-            rate_and_interval = iep.misclassification_rates()
+            rate_and_interval = iep.misclassification_rate()
             rates[i, j] = rate_and_interval[b"rate"]
     ind = divmod(rates.argmin().item(), rates.shape[1])
     bin_ic.bright_ratio = ind[0]

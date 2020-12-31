@@ -75,8 +75,8 @@ class IIDBinaryIntClassifier(Classifier):
             data = data.expand(1, -1)
         data = data.float()
 
-        intermediate_bright_lp = self.bright_dist.log_prob(data).cumsum(dim=-1).float()
-        intermediate_dark_lp = self.dark_dist.log_prob(data).cumsum(dim=-1).float()
+        intermediate_bright_lp = self.bright_model.log_prob(data).cumsum(dim=-1).float()
+        intermediate_dark_lp = self.dark_model.log_prob(data).cumsum(dim=-1).float()
         intermediate_lr = intermediate_bright_lp - intermediate_dark_lp
 
         bright_most_likely = intermediate_lr[..., -1] > 0
