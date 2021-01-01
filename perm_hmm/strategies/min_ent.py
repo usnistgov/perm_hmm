@@ -221,9 +221,16 @@ class BayesCurrentCondInitialDistribution(BayesDistribution):
 
 
 class MinEntropySelector(PermSelector):
+    """
+    A strategy for selecting permutations by choosing the one which gives the minimum
+    expected posterior entropy of the initial state distribution given a the
+    past data and the next step of data, as yet unseen.
+
+    """
 
     def __init__(self, possible_perms, hmm, save_history=False):
         # TODO: Fix this class to work with heterogeneous hmms
+
         super().__init__(possible_perms, save_history=save_history)
         self.hmm = hmm
         self.prior_log_inits = None
@@ -440,6 +447,32 @@ class MinEntropySelector(PermSelector):
     @PermSelector.manage_shape
     @PermSelector.manage_calc_history
     def get_perm(self, data, event_dims=0):
+        """
+        Given data, returns the permutation which should be applied to the HMM before the next step, based on a minimum
+        posterior entropy heuristic.
+
+        :param data: Data from the HMM, used to update the computed distributions.
+        :param event_dims: The number of dimensions which should be interpreted as event dimensions.
+        :return: A tuple. First element is
+            perm: :py:class:`torch.Tensor`
+                dtype :py:class:`int`,
+                Next permutation to apply.
+
+                shape ``batch_shape + (state_dim,)``
+
+            Second element is a dict, containing keys
+            b"dist_array": A
+                :py:class:`torch.Tensor` containing :math:`\log(p(s_0|y^i))`
+
+                shape ``batch_shape + (state_dim,)``
+
+            b"entropy_array": A :py:class:`torch.Tensor`
+                containing
+                :math:`\operatorname{min}_{\sigma}H_\sigma(S_0|Y^i, y^{i-1})`
+
+                shape ``batch_shape``
+
+        """
         self.update_prior(data)
         entropy = self.expected_entropy()
         entropy_array, perm_index = entropy.min(dim=-1)

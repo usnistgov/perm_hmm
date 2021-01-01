@@ -11,8 +11,7 @@ class PermSelector(object):
     A description of what an algorithm which selects permutations
     should do, at a minimum.
 
-    A real algorithm should include a model, and presumably
-    a calibration method.
+    A real algorithm should include a model.
     """
 
     def __init__(self, possible_perms, save_history=False):
@@ -31,6 +30,11 @@ class PermSelector(object):
 
     @classmethod
     def manage_shape(cls, get_perm):
+        """
+        A decorator provided to flatten the batch dimensions of the input.
+        :param get_perm: Permutation method to decorate.
+        :return: Decorated method.
+        """
         @wraps(get_perm)
         def _wrapper(self, *args, **kwargs):
             event_dims = kwargs.get("event_dims", 0)
@@ -53,6 +57,19 @@ class PermSelector(object):
 
     @classmethod
     def manage_calc_history(cls, get_perm):
+        """
+        WARNING: This decorator changes the return signature of the decorated method.
+
+        Given a method which returns a tuple whose first element is a permutation and whose
+        second element is a dictionary containing ancillary information which is computed to
+        compute the permutation, returns a method which returns only the permutation, while
+        appending the ancillary information the self._calc_history
+
+        :param get_perm: Method to compute the next permutation.
+        :return: A method which returns only the permutation.
+
+        ..seealso:: :py:meth:`perm_hmm.strategies.min_ent.MinEntropySelector.get_perm`
+        """
         @wraps(get_perm)
         def _wrapper(self, *args, **kwargs):
             save_history = getattr(self, "save_history", False)
@@ -69,6 +86,11 @@ class PermSelector(object):
 
     @classmethod
     def manage_perm_history(cls, get_perm):
+        """
+        Appends the permutation to self._perm_history.
+        :param get_perm: Method to get the next permutation. Should return only a permutation.
+        :return: Same method.
+        """
         @wraps(get_perm)
         def _wrapper(self, *args, **kwargs):
             perm = get_perm(self, *args, **kwargs)
@@ -140,9 +162,7 @@ class PermSelector(object):
 
     def get_perms(self, data, time_dim):
         r"""
-        Given a run of data, returns the posterior initial state distributions,
-        the optimal permutations according to
-        the bayesian heuristic, and the posterior entropies.
+        Given a run of data, returns the permutations which would be applied.
 
         This should be used to precompute the permutations for a given model
         and given data sequence.
@@ -152,25 +172,10 @@ class PermSelector(object):
 
                 shape ``batch_shape + (time_dim,)``
 
-        :returns: A :py:class:`PermWithHistory` object with leaves
-
-            .optimal_perm: A :py:class:`torch.Tensor` type :py:class:`int`
+        :returns: A :py:class:`torch.Tensor` type :py:class:`int`
             containing the optimal permutations to have applied.
 
-                shape ``batch_shape + (time_dim,)``
-
-            .history.partial_post_log_init_dists: A :py:class:`torch.Tensor`
-            containing :math:`p(s_0|y^{i})` for all :math:`i`.
-
-                shape ``batch_shape + (time_dim, state_dim)``
-
-            .history.expected_entropy: A :py:class:`torch.Tensor` containing
-            :math:`\operatorname{min}_{\sigma}H_\sigma(S_0|Y^i, y^{i-1})`
-            for all :math:`i`.
-
-                shape ``batch_shape + (time_dim,)``
-
-        .. seealso:: method :py:meth:`PermutedDiscreteHMM.sample_min_entropy`
+                shape ``batch_shape + (time_dim, num_states)``
         """
         d_shape = data.shape
         m = len(d_shape)

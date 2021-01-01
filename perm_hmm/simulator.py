@@ -17,7 +17,7 @@ class HMMSimulator(object):
         """
         Initializes the experiment.
 
-        :param bayes_perm_hmm.hmms.PermutedDiscreteHMM phmm:
+        :param perm_hmm.models.hmms.PermutedDiscreteHMM phmm:
             the model whose
             misclassification rate will be computed. The naive_hmm parameters
             will be classified from those of bayes_hmm.
@@ -33,29 +33,14 @@ class HMMSimulator(object):
 
     def all_classifications(self, num_bins, classifier=None, perm_selector=None, verbosity=0):
         """
-        Computes the data required to compute the exact misclassification rates
-        of the three models under consideration, the HMM with permtuations,
-        the HMM without permtuations, and the InterruptedClassifier.
+        Computes the data required to compute the exact misclassification rate for the given classifier.
+        :param num_bins: Number of timesteps, int.
+        :param classifier: defaults to permuted.
+        :param perm_selector: Defaults to one initialized using self.phmm
+        :param verbosity: How verbose to make the result.
 
-        :returns: :py:class:`ExactResults` with components
-
-            .interrupted_postprocessor: :py:class:`InterruptedExactPostprocessor`.
-            Use it to compute the
-            misclassification rates of the :py:class:`InterruptedClassifier`.
-
-            .naive_postprocessor: :py:class:`PostDistExactPostprocessor`.
-            Use it to compute the misclassification rates of the HMM classifier
-            without permutations.
-
-            .bayes_postprocessor: :py:class:`PostDistExactPostprocessor`.
-            Use it to compute the misclassification rates of the HMM classifier
-            with permutations.
-
-            .runs: :py:class:`ExactRun`
-            All the data which was used to produce the objects.
-            returned just in case we would like to save it for later. See
-            :py:meth:`BernoulliSimulator._exact_single_run`
-            for details on members.
+        :returns: :py:class:`ExactPostprocessor` containing all data needed to
+        compute the misclassification rates
         """
         base = len(self.phmm.observation_dist.enumerate_support())
         data = torch.stack(
@@ -72,16 +57,16 @@ class HMMSimulator(object):
             perms = perm_selector.get_perms(data, -1)
             if save_history:
                 history = perm_selector.history
-            classi_dict = classifier.classify(data, perms=perms, verbosity=verbosity)
+            classi_result = classifier.classify(data, perms=perms, verbosity=verbosity)
         else:
             perms = None
-            classi_dict = classifier.classify(data, verbosity=verbosity)
+            classi_result = classifier.classify(data, verbosity=verbosity)
         if verbosity:
-            classifications = classi_dict[b"classifications"]
+            classifications, classi_dict = classi_result
             if save_history:
                 classi_dict[b"history"] = history
         else:
-            classifications = classi_dict
+            classifications = classi_result
         lp = self.phmm.log_prob_with_perm(data, perms)
         dist = self.phmm.posterior_log_initial_state_dist(data, perms)
         log_joint = dist.T + lp
@@ -94,6 +79,17 @@ class HMMSimulator(object):
         return ep
 
     def simulate(self, num_bins, num_samples, classifier=None, perm_selector=None, verbosity=0):
+        """
+        Computes the data required to compute the misclassification rates
+        of the given classifier.
+
+        :param num_bins: Number of timesteps, int.
+        :param num_samples: number of samples to draw from the hmm, int
+        :param classifier: defaults to permuted.
+        :param perm_selector: Defaults to one initialized using self.phmm
+        :param verbosity: How verbose to make the result.
+        :return: An EmpiricalPostprocessor containing the data.
+        """
         if verbosity > 1:
             save_history = True
         else:
@@ -113,16 +109,16 @@ class HMMSimulator(object):
         if classifier is None:
             classifier = PermClassifier(self.phmm)
         if perms is not None:
-            classi_dict = classifier.classify(data, perms=perms, verbosity=verbosity)
+            classi_result = classifier.classify(data, perms=perms, verbosity=verbosity)
         else:
-            classi_dict = classifier.classify(data, verbosity=verbosity)
+            classi_result = classifier.classify(data, verbosity=verbosity)
         if verbosity:
-            classifications = classi_dict[b"classifications"]
+            classifications, classi_dict = classi_result
             classi_dict[b"data"] = data
             if history is not None:
                 classi_dict[b"history"] = history
         else:
-            classifications = classi_dict
+            classifications = classi_result
         ep = EmpiricalPostprocessor(
             output.states[..., 0],
             classifications,

@@ -65,9 +65,6 @@ class ExactPostprocessor(object):
     """
     An abstract class for postprocessing the data obtained from running
     a simulation to compute the exact misclassification rate of a model.
-
-    .. seealso:: Instances :py:class:`InterruptedExactPostprocessor`,
-        :py:class:`PostDistExactPostprocessor`
     """
 
     def __init__(self, log_joint, classifications, score=None):
@@ -89,14 +86,27 @@ class ExactPostprocessor(object):
         self.score = score
 
     def log_risk(self, log_loss):
+        """
+        Computes log bayes risk for a given log loss function.
+        :param log_loss: log loss function, should take arguments state, classification
+            and return the log loss for that pair.
+        :return: The log bayes risk for the given function.
+        """
         states = torch.arange(self.log_joint.shape[-2])
         ll = log_loss(states.unsqueeze(-1), self.classifications.unsqueeze(-2))
         return (self.log_joint + ll).logsumexp(-1).logsumexp(-1)
 
     def log_misclassification_rate(self):
+        """
+        Computes log misclassification rate.
+        :return: The log of the misclassification rate.
+        """
         return self.log_risk(log_zero_one)
 
     def log_confusion_matrix(self):
+        """
+        Computes the elementwise log of the confusion matrix, :math:`p(\hat{s}|s)`
+        """
         log_prior = self.log_joint.logsumexp(-1)
         nonzero_prior = log_prior > torch.tensor(1e-6).log()
         if not nonzero_prior.all():
@@ -127,30 +137,7 @@ class ExactPostprocessor(object):
 
         :param float prob_to_keep: The probability to keep.
 
-        :returns: :py:class:`AllRates` containing:
-
-            .false_positive_rate: :py:class:`torch.Tensor`, float
-
-                The probability that the model will conclude bright while the
-                true initial state was dark when restriced to the desired
-                domain.
-
-                shape ``()``
-
-            .false_negative_rate: :py:class:`torch.Tensor`, float
-
-                The probability that the model will conclude dark while the
-                true initial state was bright when restriced to the desired
-                domain.
-
-                shape ``()``
-
-            .average_rate: :py:class:`torch.Tensor`, float
-
-                The average under the prior initial distribution for the other
-                two rates.
-
-                shape ``()``
+        :returns: The misclassification rate keeping only the best prob_to_keep of data.
 
         :raises ValueError: if you try to throw away all the data.
         """
@@ -199,8 +186,7 @@ class ExactPostprocessor(object):
 
             shape ``(n_runs,)``
 
-        :returns: ExactPostprocessor, or subclass thereof. A postselected
-            version of self.
+        :returns: ExactPostprocessor. A postselected version of self.
         """
         if (~postselect_mask).all():
             raise ValueError("Can't throw out all the data.")
@@ -252,8 +238,18 @@ class EmpiricalPostprocessor(object):
         """
 
     def postselection_percentage_mask(self, prob_to_keep):
+        """
+        Produces a mask which indicates the top prob_to_keep of data according to
+        self.score
+        :param prob_to_keep: A float between 0 and 1.
+        :return: A boolean tensor indicating which runs to keep
+
+            shape ``(num_runs,)``
+
+        :raises AttributeError: If self.score is None
+        """
         if self.score is None:
-            raise NotImplementedError(
+            raise AttributeError(
                 "The data is not scored for postselection.")
         sort_score = self.score.sort()
         mask = torch.zeros_like(self.score, dtype=bool)
@@ -275,9 +271,29 @@ class EmpiricalPostprocessor(object):
         return self.score > threshold_score
 
     def risk(self, loss):
+        """
+        Computes bayes risk by Monte Carlo integration of a loss function.
+        :param loss: The loss function to compute bayes risk for.
+            Should take a state and a classification and return a float tensor.
+        :return: Float tensor, the Bayes risk.
+        """
         return loss(self.ground_truth, self.classifications).sum(-1) / torch.tensor(self.classifications.shape[-1]).float()
 
     def misclassification_rate(self, confidence_level=.95):
+        """
+        Computes misclassification rate and a confidence interval.
+
+        Computed using the Clopper-Pearson binomial interval.
+        :param confidence_level: The confidence level to compute a confidence
+            interval for.
+        :return: A dict with keys
+
+            b"rate": The misclassification rate as a float tensor.
+
+            b"lower": The lower bound of the confidence interval as a float tensor.
+
+            b"upper": The upper bound of the confidence interval as a float tensor.
+        """
         rate = self.risk(zero_one)
         total = torch.tensor(self.classifications.shape[-1])
         num_misses = (self.ground_truth != self.classifications).sum(-1)
@@ -285,6 +301,20 @@ class EmpiricalPostprocessor(object):
         return {b"rate": rate, b"lower": interval[0], b"upper": interval[1]}
 
     def confusion_matrix(self, confidence_level=.95):
+        """
+        Computes a confusion matrix and a confidence set for it, at the desired
+        confidence level. Requires an R `package`_ "MultinomialCI" for computing
+        the confidence set.
+        :param confidence_level:
+        :return: A dict with keys
+
+            b"matrix": The confusion matrix as a float tensor.
+
+            b"lower": The lower corner of the confidence set as a float tensor.
+
+            b"upper": The upper corner of the confidence set as a float tensor.
+        .. _package: https://cran.r-project.org/web/packages/MultinomialCI/MultinomialCI.pdf
+        """
         from rpy2.robjects.packages import importr
         from rpy2.robjects import FloatVector
         multinomial_ci = importr("MultinomialCI")
@@ -293,7 +323,7 @@ class EmpiricalPostprocessor(object):
         possible_class = torch.arange(range_class)
         lower = torch.empty((range_truth, range_class))
         upper = torch.empty((range_truth, range_class))
-        rate = torch.empty((range_truth, range_class))
+        matrix = torch.empty((range_truth, range_class))
         for i in range(range_truth.item()):
             mask = self.ground_truth == i
             if mask.any():
@@ -305,14 +335,14 @@ class EmpiricalPostprocessor(object):
                 ci = torch.from_numpy(np.array(ci))
                 lower[i] = ci[:, 0]
                 upper[i] = ci[:, 1]
-                rate[i] = frequencies
+                matrix[i] = frequencies
             else:
                 warnings.warn("No instances of state {} in ground truth, there"
                               "will be NaNs in confusion matrix.".format(i))
                 lower[i] = torch.tensor(float('NaN'))
                 upper[i] = torch.tensor(float('NaN'))
-                rate[i] = torch.tensor(float('NaN'))
-        return {b"rate": rate, b"lower": lower, b"upper": upper}
+                matrix[i] = torch.tensor(float('NaN'))
+        return {b"matrix": matrix, b"lower": lower, b"upper": upper}
 
     def postselect(self, postselection_mask):
         """
@@ -324,7 +354,7 @@ class EmpiricalPostprocessor(object):
 
             shape ``(n_runs,)``
 
-        :returns: EmpiricalPostprocessor, or subclass thereof. A postselected
+        :returns: EmpiricalPostprocessor.. A postselected
             version of self.
         """
         if (~postselection_mask).all():

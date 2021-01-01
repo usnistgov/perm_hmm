@@ -141,6 +141,8 @@ class DiscreteHMM(pyro.distributions.hmm.DiscreteHMM):
         """
         Sample from the distribution.
 
+        TODO: This method does not return the correct answer for heterogenous HMMs.
+
         :param tuple sample_shape: tuple of ints. If the model doesn't contain a
             time dimension, i.e. if :attr:`transition_logits` has only two
             dimensions, then the last element of :attr:`sample_shape` is taken
@@ -221,8 +223,7 @@ class DiscreteHMM(pyro.distributions.hmm.DiscreteHMM):
 
 class PermutedDiscreteHMM(DiscreteHMM):
     """
-    Computes minimal expected posterior entropy pemutations as new data is
-    observed.
+    Allows for the underlying states to be permuted during a run.
     """
 
     def __init__(self, initial_logits, transition_logits, observation_dist,
@@ -284,36 +285,16 @@ class PermutedDiscreteHMM(DiscreteHMM):
             ``batch_shape = sample_shape + self.batch_shape``,
             ``time_length = self.transition_logits.shape[-3]``
 
-        :returns: A :py:class:`MinEntHMMOutput` object, containing
+        :returns: A :py:class:`HMMOutput` object, containing
 
-            `.sample.states`: :py:class:`torch.Tensor`, dtype :py:class:`int`.
+            `.states`: :py:class:`torch.Tensor`, dtype :py:class:`int`.
                 The states realized during the run.
 
                 shape ``batch_shape + (time_dim,)``
 
-            `.sample.observations`: :py:class:`torch.Tensor`,
+            `.observations`: :py:class:`torch.Tensor`,
                 dtype :py:class:`float`.
                 The output observations.
-
-                shape ``batch_shape + (time_dim,)``
-
-            `.bayesian.optimal_perm`: :py:class:`torch.Tensor`
-                dtype :py:class:`int`,
-                The optimal permutations to have applied during this sequence of
-                observations.
-
-                shape ``batch_shape + (time_dim, state_dim)``
-
-            `.bayesian.history.partial_post_log_init_dists`: A
-                :py:class:`torch.Tensor` containing :math:`\log(p(s_0|y^i))`
-                for all :math:`i`.
-
-                shape ``batch_shape + (time_dim, state_dim)``
-
-            `.bayesian.history.expected_entropy`: A :py:class:`torch.Tensor`
-                containing
-                :math:`\operatorname{min}_{\sigma}H_\sigma(S_0|Y^i, y^{i-1})`
-                for all :math:`i`.
 
                 shape ``batch_shape + (time_dim,)``
         """
