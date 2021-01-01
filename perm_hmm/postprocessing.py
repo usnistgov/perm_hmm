@@ -11,6 +11,7 @@ import perm_hmm.return_types
 from perm_hmm.util import entropy
 import perm_hmm.classifiers.interrupted
 from perm_hmm.util import ZERO
+from perm_hmm.loss_functions import zero_one, log_zero_one
 
 
 def clopper_pearson(alpha, num_successes, total_trials):
@@ -58,19 +59,6 @@ def clopper_pearson(alpha, num_successes, total_trials):
     lower[n_successes == trials] = (npalpha / 2)**(1 / trials[n_successes == trials])
     upper[n_successes == trials] = 1
     return torch.stack((torch.from_numpy(lower), torch.from_numpy(upper)))
-
-
-def log_zero_one(state, classification):
-    loss = classification != state
-    floss = loss.float()
-    floss[~loss] = ZERO
-    log_loss = floss.log()
-    log_loss[~loss] = 2*log_loss[~loss]
-    return log_loss
-
-
-def zero_one(state, classification):
-    return classification != state
 
 
 class ExactPostprocessor(object):

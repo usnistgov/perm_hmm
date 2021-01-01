@@ -2,6 +2,7 @@ import torch
 from perm_hmm.classifiers.interrupted import IIDBinaryIntClassifier, IIDInterruptedClassifier
 # from perm_hmm.postprocessing.interrupted_postprocessors import InterruptedEmpiricalPostprocessor, InterruptedExactPostprocessor
 from perm_hmm.postprocessing import ExactPostprocessor, EmpiricalPostprocessor
+from perm_hmm.loss_functions import binary_zero_one, log_binary_zero_one
 
 
 def exact_train_ic(ic: IIDInterruptedClassifier, all_data, log_joint,
@@ -61,7 +62,7 @@ def train_ic(ic: IIDInterruptedClassifier, training_data, ground_truth, num_rati
     ic.ratio = spaced_ratios[min_rate.indices]
     return min_rate.values
 
-def train_binary_ic(bin_ic: IIDBinaryIntClassifier, training_data, actually_bright, num_ratios=20):
+def train_binary_ic(bin_ic: IIDBinaryIntClassifier, training_data, actually_bright, dark_state, bright_state, num_ratios=20):
     """
     Trains the classifier. This is to find the optimal likelihood ratio
     thresholds to minimize classification error.
@@ -98,13 +99,13 @@ def train_binary_ic(bin_ic: IIDBinaryIntClassifier, training_data, actually_brig
                 ground_truth,
                 interrupted_results,
             )
-            rate_and_interval = iep.misclassification_rate()
+            rate_and_interval = iep.risk(binary_zero_one(dark_state, bright_state))
             rates[i, j] = rate_and_interval[b"rate"]
     ind = divmod(rates.argmin().item(), rates.shape[1])
-    bin_ic.bright_ratio = ind[0]
-    bin_ic.dark_ratio = ind[1]
+    bin_ic.bright_ratio = ratios[ind[0]]
+    bin_ic.dark_ratio = ratios[ind[1]]
 
-def exact_train_binary_ic(bin_ic: IIDBinaryIntClassifier, all_data, log_joint, num_ratios=20):
+def exact_train_binary_ic(bin_ic: IIDBinaryIntClassifier, all_data, log_joint, dark_state, bright_state, num_ratios=20):
     """
     Trains the classifier. This is to find the optimal likelihood ratio
     thresholds to minimize classification error.
@@ -137,7 +138,7 @@ def exact_train_binary_ic(bin_ic: IIDBinaryIntClassifier, all_data, log_joint, n
                 log_joint,
                 interrupted_results,
             )
-            rates[i, j] = iep.log_misclassification_rate()
+            rates[i, j] = iep.log_risk(log_binary_zero_one(dark_state, bright_state))
     ind = divmod(rates.argmin().item(), rates.shape[1])
-    bin_ic.bright_ratio = ind[0]
-    bin_ic.dark_ratio = ind[1]
+    bin_ic.bright_ratio = ratios[ind[0]]
+    bin_ic.dark_ratio = ratios[ind[1]]

@@ -10,7 +10,7 @@ from perm_hmm.util import num_to_data
 from perm_hmm.postprocessing import ExactPostprocessor, EmpiricalPostprocessor
 import perm_hmm.physical_systems.beryllium as beryllium
 from perm_hmm.strategies.min_ent import MinEntropySelector
-
+from perm_hmm.loss_functions import binary_zero_one, log_binary_zero_one
 
 def exact_rates(phmm: PermutedDiscreteHMM, num_bins, perm_selector, classifier=None, num_ratios=20, verbosity=0):
     experiment_parameters = {
@@ -36,7 +36,7 @@ def exact_rates(phmm: PermutedDiscreteHMM, num_bins, perm_selector, classifier=N
     lp = phmm.log_prob(data)
     plisd = phmm.posterior_log_initial_state_dist(data)
     log_joint = plisd.T + lp
-    _ = exact_train_binary_ic(ic, data, log_joint, num_ratios=num_ratios)
+    _ = exact_train_binary_ic(ic, data, log_joint, beryllium.DARK_STATE, beryllium.BRIGHT_STATE, num_ratios=num_ratios)
     nop = simulator.all_classifications(num_bins, classifier=classifier, verbosity=verbosity)
     pp = simulator.all_classifications(num_bins, classifier=classifier, perm_selector=perm_selector, verbosity=verbosity)
     if verbosity:
@@ -47,12 +47,12 @@ def exact_rates(phmm: PermutedDiscreteHMM, num_bins, perm_selector, classifier=N
         i_classifications = i_results[0]
     else:
         i_classifications = i_results
-    ip = ExactPostprocessor(nop.log_joint, i_classifications)
+    ip = ExactPostprocessor(log_joint, i_classifications)
     i_classifications = ip.classifications
     no_classifications = nop.classifications
     p_classifications = pp.classifications
     toret =  {
-        b"interrupted_log_rate": ip.log_misclassification_rate(),
+        b"interrupted_log_rate": ip.log_risk(log_binary_zero_one(beryllium.DARK_STATE, beryllium.BRIGHT_STATE)),
         b"permuted_log_rate": pp.log_misclassification_rate(),
         b"unpermuted_log_rate": nop.log_misclassification_rate(),
         b"interrupted_log_matrix": ip.log_confusion_matrix(),
@@ -87,7 +87,7 @@ def empirical_rates(phmm: PermutedDiscreteHMM, num_bins, perm_selector, classifi
         torch.tensor(1.),
     )
     x, training_data = phmm.sample((num_train, num_bins))
-    _ = train_binary_ic(ic, training_data, x[..., 0], num_ratios=num_ratios)
+    _ = train_binary_ic(ic, training_data, x[..., 0], beryllium.DARK_STATE, beryllium.BRIGHT_STATE, num_ratios=num_ratios)
     pp = simulator.simulate(num_bins, num_samples, classifier=classifier, perm_selector=perm_selector, verbosity=verbosity)
     nop, d = simulator.simulate(num_bins, num_samples, classifier=classifier, verbosity=max(1, verbosity))
     if verbosity:
@@ -97,7 +97,14 @@ def empirical_rates(phmm: PermutedDiscreteHMM, num_bins, perm_selector, classifi
         i_classifications, i_dict = i_results
     else:
         i_classifications = i_results
-    ip = EmpiricalPostprocessor(nop.ground_truth, i_classifications)
+
+    # HACK: We need to translate the binary classifications to the HMM classifications.
+    # For purposes of computing misclassification rates, we can instead use the
+    # binary_zero_one loss function, but I haven't implemented a confidence interval
+    # for that, so we just do this instead.
+    testing_states = torch.tensor([beryllium.DARK_STATE, beryllium.BRIGHT_STATE])
+    ip = EmpiricalPostprocessor(nop.ground_truth, testing_states[i_classifications])
+
     i_classifications = ip.classifications
     no_classifications = nop.classifications
     p_classifications = pp.classifications
