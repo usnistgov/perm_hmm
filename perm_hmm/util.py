@@ -177,6 +177,5 @@ def index_to_tuple(index, axis):
     :return: A tuple of tensors which can be broadcast to shape ``index.shape``
     """
     shape = index.shape
-    l = len(shape)
     x = indices(shape)
     return x[:axis] + (index,) + x[axis:]

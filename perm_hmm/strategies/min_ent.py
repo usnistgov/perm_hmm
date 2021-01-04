@@ -11,7 +11,6 @@ All distributions are in log space.
 from operator import mul
 from functools import reduce
 import torch
-from pyro.distributions.util import broadcast_shape
 from pyro.distributions.hmm import _logmatmulexp
 from perm_hmm.return_types import PostYPostS0, GenDistEntropy
 from perm_hmm.util import ZERO, wrap_index
@@ -157,9 +156,7 @@ class BayesCurrentDistribution(BayesDistribution):
             shape ``batch_shape + (n_outcomes, 1, 1, state_dim)``
         :returns: shape ``batch_shape + (n_outcomes, n_perms)``
         """
-        return \
-            (self.logits.unsqueeze(-2) +
-                observation_logits).logsumexp(-1).squeeze(-1)
+        return (self.logits.unsqueeze(-2) + observation_logits).logsumexp(-1).squeeze(-1)
 
 
 class BayesCurrentCondInitialDistribution(BayesDistribution):
@@ -304,7 +301,6 @@ class MinEntropySelector(PermSelector):
         """
         super().reset(save_history=save_history)
         n_perms = len(self.possible_perms)
-        n_states = len(self.hmm.initial_logits)
         self.prior_log_inits.logits = self.hmm.initial_logits.clone().detach()
         self.prior_log_current.logits = \
             self.hmm.initial_logits.clone().detach().repeat(n_perms, 1)
@@ -447,7 +443,7 @@ class MinEntropySelector(PermSelector):
     @PermSelector.manage_shape
     @PermSelector.manage_calc_history
     def get_perm(self, data, event_dims=0):
-        """
+        r"""
         Given data, returns the permutation which should be applied to the HMM before the next step, based on a minimum
         posterior entropy heuristic.
 

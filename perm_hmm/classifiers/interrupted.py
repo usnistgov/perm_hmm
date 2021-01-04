@@ -35,7 +35,6 @@ class IIDInterruptedClassifier(Classifier):
         self.dist = dist
         """
         Distribution used to compute probabilities.
-        
         Should have .batch_shape[-1] == num_states
         """
         self.ratio = ratio
@@ -44,7 +43,7 @@ class IIDInterruptedClassifier(Classifier):
         """
 
     def classify(self, data, verbosity=0):
-        """
+        r"""
         Classifies data.
 
         At each time :math:`t`, denote by :math:`q^{(t)}_j(y^t)` the sorted likelihoods :math:`r_i(y^t) = \prod_{s=0}^tr_i(y_s)`,
@@ -112,20 +111,20 @@ class IIDBinaryIntClassifier(Classifier):
         self.bright_model = bright_model
         self.dark_model = dark_model
         self.bright_ratio = bright_ratio
-        """
+        r"""
         Torch float. Parameter such that if :math:`\log(L_{bright}/L_{dark})` exceeds
         it, the classifier concludes there is enough evidence to terminate and
         classify as bright
         """
         self.dark_ratio = dark_ratio
-        """
+        r"""
         Torch float. Parameter such that if :math:`\log(L_{dark}/L_{bright})` exceeds
         it, the classifier concludes there is enough evidence to terminate and
         classify as dark
         """
 
     def classify(self, data, verbosity=0):
-        """
+        r"""
         Performs classification.
 
         At each time :math:`t`, compute :math:`\lambda = log(L_{bright}(y^t)/L_{dark}(y^t))`,

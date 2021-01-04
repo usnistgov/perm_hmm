@@ -18,8 +18,8 @@ import pyro.distributions.hmm
 from pyro.distributions.hmm import _sequential_logmatmulexp
 from pyro.distributions.util import broadcast_shape
 
-from perm_hmm.util import wrap_index, id_and_transpositions
-from perm_hmm.return_types import HMMOutput, PHMMOutHistory, PermHMMOutput
+from perm_hmm.util import wrap_index
+from perm_hmm.return_types import HMMOutput
 from perm_hmm.strategies.selector import PermSelector
 
 
@@ -99,7 +99,7 @@ class DiscreteHMM(pyro.distributions.hmm.DiscreteHMM):
         """
         A parameters method to fit into the torch framework.
         :return: A list containing the initial log probs, the log transition
-        probs, and the params which describe the observation distribution.
+            probs, and the params which describe the observation distribution.
         """
         return \
             [
@@ -260,7 +260,7 @@ class PermutedDiscreteHMM(DiscreteHMM):
     def from_hmm(cls, hmm: DiscreteHMM):
         return cls(hmm.initial_logits, hmm.transition_logits, hmm.observation_dist)
 
-    def sample(self, sample_shape=(), perm_selector: PermSelector=None):
+    def sample(self, sample_shape=(), perm_selector: PermSelector = None):
         r"""
         This method allows us to sample from the HMM with the minimum expected
         posterior entropy heuristic.
@@ -284,6 +284,11 @@ class PermutedDiscreteHMM(DiscreteHMM):
             So
             ``batch_shape = sample_shape + self.batch_shape``,
             ``time_length = self.transition_logits.shape[-3]``
+        :param perm_selector: A PermSelector object, must implement
+            .get_perm, which is a method which takes batched data
+            of shape ``batch_shape``
+            and returns a batched permutation of shape
+            ``batch_shape + (num_states,)``.
 
         :returns: A :py:class:`HMMOutput` object, containing
 

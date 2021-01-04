@@ -1,16 +1,16 @@
-.. bayes_perm_hmm documentation master file, created by
-   sphinx-quickstart on Tue Jul 14 18:10:04 2020.
+.. perm_hmm documentation master file, created by
+   sphinx-quickstart on Mon Jan  4 13:23:50 2021.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to bayes_perm_hmm's documentation!
-==========================================
+Welcome to perm_hmm's documentation!
+====================================
 
 .. toctree::
    :maxdepth: 4
    :caption: Contents:
 
-   bayes_perm_hmm
+   perm_hmm
    setup
 
 

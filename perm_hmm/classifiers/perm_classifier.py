@@ -1,5 +1,3 @@
-import torch
-
 from perm_hmm.classifiers.generic_classifiers import MAPClassifier
 
 
@@ -7,9 +5,6 @@ class PermClassifier(MAPClassifier):
     """
     MAP classifier for an HMM with permutations.
     """
-
-    def __init__(self, model):
-        self.model = model
 
     def classify(self, data, perms=None, verbosity=0):
         """
