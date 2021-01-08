@@ -101,8 +101,8 @@ def train_binary_ic(bin_ic: IIDBinaryIntClassifier, training_data, ground_truth,
                 ground_truth,
                 interrupted_results,
             )
-            rate_and_interval = iep.risk(binary_zero_one(dark_state, bright_state))
-            rates[i, j] = rate_and_interval[b"rate"]
+            rate = iep.risk(binary_zero_one(dark_state, bright_state))
+            rates[i, j] = rate
     ind = divmod(rates.argmin().item(), rates.shape[1])
     bin_ic.bright_ratio = ratios[ind[0]]
     bin_ic.dark_ratio = ratios[ind[1]]

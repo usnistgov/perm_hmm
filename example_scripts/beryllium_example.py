@@ -103,7 +103,7 @@ def empirical_rates(phmm: PermutedDiscreteHMM, num_bins, perm_selector, classifi
     # binary_zero_one loss function, but I haven't implemented a confidence interval
     # for that, so we just do this instead.
     testing_states = torch.tensor([beryllium.DARK_STATE, beryllium.BRIGHT_STATE])
-    ip = EmpiricalPostprocessor(nop.ground_truth, testing_states[i_classifications])
+    ip = EmpiricalPostprocessor(nop.ground_truth, testing_states[i_classifications.long()])
 
     i_classifications = ip.classifications
     no_classifications = nop.classifications
