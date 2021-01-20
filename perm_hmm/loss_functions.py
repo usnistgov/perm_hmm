@@ -20,7 +20,7 @@ def log_binary_zero_one(dark_state, bright_state):
     testing_states = torch.tensor([dark_state, bright_state], dtype=int)
 
     def _wrapper(state, classification):
-        return log_zero_one(state, testing_states[classification])
+        return log_zero_one(state, testing_states[classification.long()])
     return _wrapper
 
 
