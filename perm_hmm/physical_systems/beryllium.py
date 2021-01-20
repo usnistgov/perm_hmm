@@ -334,3 +334,32 @@ def allowable_permutations():
     return perms
 
 
+def main(args):
+    integration_time = args.integration_time
+    filename = args.filename
+    if filename.split(".")[-1] != "npz":
+        filename += ".npz"
+    bright_or_dark, pij, bright_probs = bernoulli_parameters(integration_time)
+    perms = allowable_permutations()
+    np.savez(filename, pij=pij, bright_probs=bright_probs, perms=perms)
+
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser("Get parameter matrices for Beryllium")
+    parser.add_argument(
+        "-o",
+        "--filename",
+        help=".npz filename to write to. Extension will be added if not already .npz,"
+             " extension will be appended.",
+        type=str,
+    )
+    parser.add_argument(
+        "integration_time",
+        metavar="integration-time",
+        help="The amount of time to integrate the collection of photons for."
+             "Pass something that can be cast as a float, e.g. 1.1e-07",
+        type=float,
+    )
+    args = parser.parse_args()
+    main(args)
