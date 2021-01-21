@@ -118,7 +118,10 @@ class ExactPostprocessor(object):
         log_one_hot[~one_hot] = 2*log_one_hot[~one_hot]
         log_confusion_rates = (log_data_given_state.unsqueeze(-2) + \
             log_one_hot.unsqueeze(-3)).logsumexp(-1)
-        log_confusion_rates[~nonzero_prior] = torch.tensor(float('NaN'))
+        if log_confusion_rates.dtype == torch.double:
+            log_confusion_rates[~nonzero_prior] = torch.tensor(float('NaN')).double()
+        else:
+            log_confusion_rates[~nonzero_prior] = torch.tensor(float('NaN'))
         return log_confusion_rates
 
     def postselected_misclassification_rate(self, log_prob_to_keep):
