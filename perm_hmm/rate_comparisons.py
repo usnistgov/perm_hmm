@@ -129,8 +129,8 @@ def exact_binary_rates(phmm: PermutedDiscreteHMM, num_bins, perm_selector, dark_
     }
     simulator = HMMSimulator(phmm)
     ic = IIDBinaryIntClassifier(
-        dist.Bernoulli(phmm.observation_dist._param[bright_state]),
-        dist.Bernoulli(phmm.observation_dist._param[dark_state]),
+        type(phmm.observation_dist)(phmm.observation_dist._param[bright_state]),
+        type(phmm.observation_dist)(phmm.observation_dist._param[dark_state]),
         torch.tensor(1.),
         torch.tensor(1.),
     )
