@@ -1,9 +1,8 @@
 import numpy as np
 
-num_states = 3
 
-
-def gen_hmm(a, b, c=None, d=None):
+def three_state_params(a, b, c=None, d=None):
+    num_states = 3
     if c is None:
         c = b
     if d is None:
