@@ -1,7 +1,7 @@
 import unittest
 import torch
 import pyro.distributions as dist
-from perm_hmm.classifiers.interrupted import IIDInterruptedClassifier
+from perm_hmm.classifiers.interrupted import IIDInterruptedClassifier, IIDBinaryIntClassifier
 from perm_hmm.models.hmms import DiscreteHMM, PermutedDiscreteHMM
 from perm_hmm.postprocessing import ExactPostprocessor, EmpiricalPostprocessor
 import perm_hmm.training.interrupted_training
@@ -72,6 +72,49 @@ class MyTestCase(unittest.TestCase):
         conf = iep.log_confusion_matrix()
         self.assertTrue(conf[self.testing_states].logsumexp(-1).allclose(torch.tensor(0.), atol=1e-5))
         print(res)
+
+    def test_consistency(self):
+        num_states = 3
+        for i in range(100):
+            with self.subTest(i=i):
+                dir = dist.Dirichlet(torch.ones(num_states)/num_states)
+                observation_probs = torch.rand((num_states,))
+                observation_dist = dist.Bernoulli(observation_probs)
+                transition_logits = dir.sample((num_states,)).log()
+                num_testing_states = 2
+                testing_states = torch.randint(num_states, (num_testing_states,))
+                while len(testing_states.unique()) != len(testing_states):
+                    testing_states = torch.randint(num_states, (num_testing_states,))
+                dir = dist.Dirichlet(torch.ones(num_testing_states)/num_testing_states)
+                not_states = torch.tensor(list(set(range(num_states)).difference(set(testing_states.tolist()))))
+                il = dir.sample()
+                initial_logits = torch.empty(num_states)
+                initial_logits[testing_states] = il
+                initial_logits[not_states] = ZERO
+                initial_logits = initial_logits.log()
+                possible_perms = \
+                    torch.stack(
+                        [torch.arange(num_states)] +
+                        transpositions(num_states)
+                    )
+                hmm = DiscreteHMM(
+                    initial_logits,
+                    transition_logits,
+                    observation_dist,
+                )
+                ic = IIDInterruptedClassifier(dist.Bernoulli(observation_probs[[testing_states[:2]]]), torch.tensor(19.))
+                bin_ic = IIDBinaryIntClassifier(dist.Bernoulli(observation_probs[testing_states[1]]),dist.Bernoulli(observation_probs[testing_states[0]]), torch.tensor(19.), torch.tensor(19.))
+                time_dim = 8
+                all_possible_runs = torch.stack([num_to_data(x, time_dim) for x in range(2**time_dim)])
+
+                bin_class = bin_ic.classify(all_possible_runs).long()
+                classifi = ic.classify(all_possible_runs)
+                if not ((bin_class == classifi).all()):
+                    bin_class = bin_ic.classify(all_possible_runs)
+                    classifi = ic.classify(all_possible_runs)
+
+
+
 
 if __name__ == '__main__':
     unittest.main()

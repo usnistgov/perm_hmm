@@ -171,7 +171,7 @@ class IIDBinaryIntClassifier(Classifier):
 
         classified_bright = \
             (one_break & bright_break_flag) | \
-            (both_break & bright_first) | \
+            (both_break & (bright_first & bright_break_flag)) | \
             (neither_break & bright_most_likely)
         if not verbosity:
             return classified_bright.int()

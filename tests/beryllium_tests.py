@@ -35,7 +35,6 @@ class MyTestCase(unittest.TestCase):
                     )
 
     def test_akij(self):
-
         for n in range(2, 5):
             mlist = [np.random.rand(n, n), np.random.rand(1, n, n), np.random.rand(3, 4, n, n)]
             slist = [np.random.randn(), np.random.randn(1), np.random.randn(7, 6)]
