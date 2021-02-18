@@ -7,10 +7,10 @@ from perm_hmm.classifiers.interrupted import IIDInterruptedClassifier, IIDBinary
 from perm_hmm.training.interrupted_training import exact_train_ic, train_ic, train_binary_ic, exact_train_binary_ic
 from perm_hmm.util import num_to_data
 from perm_hmm.postprocessing import ExactPostprocessor, EmpiricalPostprocessor
-from perm_hmm.loss_functions import log_zero_one, log_binary_zero_one
+# from perm_hmm.loss_functions import log_zero_one, log_binary_zero_one
 
 
-def exact_rates(phmm: PermutedDiscreteHMM, num_bins, perm_selector, classifier=None, num_ratios=20, verbosity=0):
+def exact_rates(phmm: PermutedDiscreteHMM, num_bins, perm_selector, classifier=None, num_ratios=20, verbosity=0, testing_states=None):
     # Initialize the parameters
     experiment_parameters = {
         b"hmm_params": {
@@ -25,6 +25,7 @@ def exact_rates(phmm: PermutedDiscreteHMM, num_bins, perm_selector, classifier=N
     ic = IIDInterruptedClassifier(
         phmm.observation_dist,
         torch.tensor(1.),
+        testing_states=testing_states,
     )
     base = len(phmm.observation_dist.enumerate_support())
     data = torch.stack(
@@ -49,7 +50,8 @@ def exact_rates(phmm: PermutedDiscreteHMM, num_bins, perm_selector, classifier=N
     no_classifications = nop.classifications
     p_classifications = pp.classifications
     toret =  {
-        b"interrupted_log_rate": ip.log_risk(log_zero_one),
+        # b"interrupted_log_rate": ip.log_risk(log_zero_one),
+        b"interrupted_log_rate": ip.log_misclassification_rate(),
         b"permuted_log_rate": pp.log_misclassification_rate(),
         b"unpermuted_log_rate": nop.log_misclassification_rate(),
         b"interrupted_log_matrix": ip.log_confusion_matrix(),
@@ -156,8 +158,9 @@ def exact_binary_rates(phmm: PermutedDiscreteHMM, num_bins, perm_selector, dark_
     i_classifications = ip.classifications
     no_classifications = nop.classifications
     p_classifications = pp.classifications
-    toret =  {
-        b"interrupted_log_rate": ip.log_risk(log_binary_zero_one(dark_state, bright_state)),
+    toret = {
+        # b"interrupted_log_rate": ip.log_risk(log_binary_zero_one(dark_state, bright_state)),
+        b"interrupted_log_rate": ip.log_misclassification_rate(),
         b"permuted_log_rate": pp.log_misclassification_rate(),
         b"unpermuted_log_rate": nop.log_misclassification_rate(),
         b"interrupted_log_matrix": ip.log_confusion_matrix(),
@@ -191,6 +194,8 @@ def empirical_binary_rates(phmm: PermutedDiscreteHMM, num_bins, perm_selector, d
         dist.Bernoulli(phmm.observation_dist._param[dark_state]),
         torch.tensor(1.),
         torch.tensor(1.),
+        bright_state=bright_state,
+        dark_state=dark_state,
     )
     x, training_data = phmm.sample((num_train, num_bins))
     _ = train_binary_ic(ic, training_data, x[..., 0], dark_state, bright_state, num_ratios=num_ratios)
@@ -208,8 +213,9 @@ def empirical_binary_rates(phmm: PermutedDiscreteHMM, num_bins, perm_selector, d
     # For purposes of computing misclassification rates, we can instead use the
     # binary_zero_one loss function, but I haven't implemented a confidence interval
     # for that, so we just do this instead.
-    testing_states = torch.tensor([dark_state, bright_state])
-    ip = EmpiricalPostprocessor(nop.ground_truth, testing_states[i_classifications.long()])
+    # testing_states = torch.tensor([dark_state, bright_state])
+    # ip = EmpiricalPostprocessor(nop.ground_truth, testing_states[i_classifications.long()])
+    ip = EmpiricalPostprocessor(nop.ground_truth, i_classifications)
 
     i_classifications = ip.classifications
     no_classifications = nop.classifications

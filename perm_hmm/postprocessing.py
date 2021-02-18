@@ -64,19 +64,19 @@ class ExactPostprocessor(object):
     a simulation to compute the exact misclassification rate of a model.
     """
 
-    def __init__(self, log_joint, classifications, score=None):
+    def __init__(self, log_joint, classifications, score=None, testing_states=None):
         """
         :param torch.Tensor log_joint:
         :param classifications:
         :param score:
         """
         if not len(classifications.shape) == 1:
-            raise ValueError("Classifications do not have the right shape")
+            raise ValueError("Classifications must have exactly 1 dimension")
         if not len(log_joint.shape) == 2:
-            raise ValueError("log_joint does not have the right shape.")
+            raise ValueError("log_joint must have exactly two dimensions.")
         if not log_joint.shape[-1] == classifications.shape[-1]:
-            raise ValueError("Classifications should have same shape as log_joint.")
-        if (score is not None) and (score.shape != classifications):
+            raise ValueError("Classifications should have same last dimension as log_joint.")
+        if (score is not None) and (score.shape != classifications.shape):
             raise ValueError("Score should have same shape as classifications.")
         self.log_joint = log_joint
         self.classifications = classifications
@@ -115,7 +115,7 @@ class ExactPostprocessor(object):
         f_one_hot = one_hot.float()
         f_one_hot[~one_hot] = ZERO
         log_one_hot = f_one_hot.log()
-        log_one_hot[~one_hot] = 2*log_one_hot[~one_hot]
+        # log_one_hot[~one_hot] = 2*log_one_hot[~one_hot]
         log_confusion_rates = (log_data_given_state.unsqueeze(-2) + \
             log_one_hot.unsqueeze(-3)).logsumexp(-1)
         if log_confusion_rates.dtype == torch.double:

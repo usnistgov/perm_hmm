@@ -13,7 +13,8 @@ class MyTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.num_states = 5
         dir = dist.Dirichlet(torch.ones(self.num_states)/self.num_states)
-        self.observation_dist = dist.Bernoulli(torch.rand((self.num_states,)))
+        self.observation_probs = torch.rand((self.num_states,))
+        self.observation_dist = dist.Bernoulli(self.observation_probs)
         self.transition_logits = dir.sample((self.num_states,)).log()
         self.num_testing_states = 3
         self.testing_states = torch.randint(self.num_states, (self.num_testing_states,))
@@ -40,7 +41,7 @@ class MyTestCase(unittest.TestCase):
         self.bhmm = PermutedDiscreteHMM.from_hmm(self.hmm)
         self.perm_selector = MinEntropySelector(self.possible_perms, self.bhmm,
                                                 save_history=True)
-        self.ic = IIDInterruptedClassifier(self.observation_dist, torch.tensor(1.))
+        self.ic = IIDInterruptedClassifier(dist.Bernoulli(self.observation_probs[self.testing_states]), torch.tensor(1.), testing_states=self.testing_states)
 
     def test_ic(self):
         num_training_samples = 100
@@ -58,7 +59,7 @@ class MyTestCase(unittest.TestCase):
         rate = iep.misclassification_rate()
         conf = iep.confusion_matrix(.95)
         print(conf)
-        self.assertTrue(conf[b"rate"][self.testing_states].sum(-1).allclose(torch.tensor(1.)))
+        self.assertTrue(conf[b"matrix"][self.testing_states].sum(-1).allclose(torch.tensor(1.)))
         all_possible_runs = torch.stack([num_to_data(x, time_dim) for x in range(2**time_dim)])
         plisd = self.hmm.posterior_log_initial_state_dist(all_possible_runs)
         lp = self.hmm.log_prob(all_possible_runs)
@@ -102,8 +103,8 @@ class MyTestCase(unittest.TestCase):
                     transition_logits,
                     observation_dist,
                 )
-                ic = IIDInterruptedClassifier(dist.Bernoulli(observation_probs[[testing_states[:2]]]), torch.tensor(19.))
-                bin_ic = IIDBinaryIntClassifier(dist.Bernoulli(observation_probs[testing_states[1]]),dist.Bernoulli(observation_probs[testing_states[0]]), torch.tensor(19.), torch.tensor(19.))
+                ic = IIDInterruptedClassifier(dist.Bernoulli(observation_probs[[testing_states[:2]]]), torch.tensor(19.), testing_states=testing_states[:2])
+                bin_ic = IIDBinaryIntClassifier(dist.Bernoulli(observation_probs[testing_states[1]]),dist.Bernoulli(observation_probs[testing_states[0]]), torch.tensor(19.), torch.tensor(19.), testing_states[1], testing_states[0])
                 time_dim = 8
                 all_possible_runs = torch.stack([num_to_data(x, time_dim) for x in range(2**time_dim)])
 

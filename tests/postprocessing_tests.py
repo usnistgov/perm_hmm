@@ -30,7 +30,8 @@ class MyTestCase(unittest.TestCase):
         self.initial_logits = self.initial_logits.log()
         dir = dist.Dirichlet(torch.ones(self.num_states)/self.num_states)
         self.transition_logits = dir.sample((self.num_states,)).log()
-        self.observation_dist = dist.Bernoulli(torch.rand((self.num_states,)))
+        self.observation_probs = torch.rand((self.num_states,))
+        self.observation_dist = dist.Bernoulli(self.observation_probs)
         self.possible_perms = torch.stack([torch.arange(self.num_states)] + transpositions(self.num_states))
         self.bdhmm = PermutedDiscreteHMM(self.initial_logits,
                                          self.transition_logits,
@@ -51,9 +52,9 @@ class MyTestCase(unittest.TestCase):
         ep = EmpiricalPostprocessor(ground_truth, classifications)
         mr = ep.confusion_matrix(.95)
         print(mr)
-        self.assertTrue(torch.allclose(mr[b"rate"][self.testing_states].sum(-1), torch.tensor(1.)))
-        self.assertTrue((mr[b"lower"][self.testing_states] <= mr[b"rate"][self.testing_states]).all())
-        self.assertTrue((mr[b"upper"][self.testing_states] >= mr[b"rate"][self.testing_states]).all())
+        self.assertTrue(torch.allclose(mr[b"matrix"][self.testing_states].sum(-1), torch.tensor(1.)))
+        self.assertTrue((mr[b"lower"][self.testing_states] <= mr[b"matrix"][self.testing_states]).all())
+        self.assertTrue((mr[b"upper"][self.testing_states] >= mr[b"matrix"][self.testing_states]).all())
         v = self.perm_selector.get_perms(y, -1)
         hist = self.perm_selector.calc_history
         b_log_post_dist = hist[b"dist_array"][..., -1, :]
@@ -61,16 +62,18 @@ class MyTestCase(unittest.TestCase):
         bep = EmpiricalPostprocessor(ground_truth, b_classifications)
         mr = bep.confusion_matrix()
         print(mr)
-        self.assertTrue(torch.allclose(mr[b"rate"][self.testing_states].sum(-1), torch.tensor(1.)))
-        self.assertTrue((mr[b"lower"][self.testing_states] <= mr[b"rate"][self.testing_states]).all())
-        self.assertTrue((mr[b"upper"][self.testing_states] >= mr[b"rate"][self.testing_states]).all())
+        self.assertTrue(torch.allclose(mr[b"matrix"][self.testing_states].sum(-1), torch.tensor(1.)))
+        self.assertTrue((mr[b"lower"][self.testing_states] <= mr[b"matrix"][self.testing_states]).all())
+        self.assertTrue((mr[b"upper"][self.testing_states] >= mr[b"matrix"][self.testing_states]).all())
 
         observation_params = self.observation_dist._param
         bright_state = observation_params.argmax(-1)
         dark_state = observation_params.argmin(-1)
+        testing_states = torch.tensor([dark_state, bright_state])
         ic = IIDInterruptedClassifier(
-            self.observation_dist,
+            dist.Bernoulli(self.observation_probs[testing_states]),
             torch.tensor(1.),
+            testing_states=testing_states,
         )
         train_x, train_y = self.shmm.sample((num_samples, max_t))
         ground_truth = train_x[..., 0]
@@ -82,9 +85,9 @@ class MyTestCase(unittest.TestCase):
         )
         mr = ip.confusion_matrix()
         print(mr)
-        self.assertTrue(torch.allclose(mr[b"rate"][self.testing_states].sum(-1), torch.tensor(1.)))
-        self.assertTrue((mr[b"lower"][self.testing_states] <= mr[b"rate"][self.testing_states]).all())
-        self.assertTrue((mr[b"upper"][self.testing_states] >= mr[b"rate"][self.testing_states]).all())
+        self.assertTrue(torch.allclose(mr[b"matrix"][self.testing_states].sum(-1), torch.tensor(1.)))
+        self.assertTrue((mr[b"lower"][self.testing_states] <= mr[b"matrix"][self.testing_states]).all())
+        self.assertTrue((mr[b"upper"][self.testing_states] >= mr[b"matrix"][self.testing_states]).all())
 
         all_data = torch.stack([num_to_data(x, max_t) for x in range(2**max_t)])
         all_naive_post = self.shmm.posterior_log_initial_state_dist(all_data)
@@ -116,7 +119,7 @@ class MyTestCase(unittest.TestCase):
         mr = bp.log_misclassification_rate()
         conf = bp.log_confusion_matrix()
         print(mr)
-        self.assertTrue(conf[self.testing_states].logsumexp(-1).allclose(torch.tensor(0.), atol=7e-7))
+        self.assertTrue(conf[self.testing_states].logsumexp(-1).allclose(torch.tensor(0.), atol=1e-6))
         _ = exact_train_ic(ic, all_data, log_joint)
         ic_results = ic.classify(all_data)
         ip = ExactPostprocessor(
@@ -126,7 +129,7 @@ class MyTestCase(unittest.TestCase):
         ave = ip.log_misclassification_rate()
         conf = ip.log_confusion_matrix()
         print(mr)
-        self.assertTrue(conf[self.testing_states].logsumexp(-1).allclose(torch.tensor(0.), atol=5e-7))
+        self.assertTrue(conf[self.testing_states].logsumexp(-1).allclose(torch.tensor(0.), atol=1e-6))
 
 
 if __name__ == '__main__':

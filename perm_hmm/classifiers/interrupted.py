@@ -31,7 +31,7 @@ class IIDInterruptedClassifier(Classifier):
         \hat{s} = \mathcal{S}(\argmax{i} r_i(y^t))
     """
 
-    def __init__(self, dist, ratio):
+    def __init__(self, dist, ratio, testing_states=None):
         self.dist = dist
         """
         Distribution used to compute probabilities.
@@ -41,6 +41,10 @@ class IIDInterruptedClassifier(Classifier):
         """
         Threshold likelihood ratio.
         """
+        if testing_states is not None:
+            self.testing_states = testing_states
+        else:
+            self.testing_states = torch.arange(self.dist.batch_shape[-1])
 
     def classify(self, data, verbosity=0):
         r"""
@@ -90,11 +94,20 @@ class IIDInterruptedClassifier(Classifier):
         ix = indices(first_breaks.shape)
         _, sort_inds = torch.broadcast_tensors(breaks.unsqueeze(-1), sort_inds)
         classifications = sort_inds[..., -1, -1]
-        classifications[first_breaks >= 0] = sort_inds[ix + (first_breaks, torch.zeros_like(first_breaks, dtype=int))][first_breaks >= 0]
+        mask = first_breaks < breaks.shape[-1]
+        fb = first_breaks.clone().detach()
+        fb[~mask] = -1
+        classifications[mask] = sort_inds[ix + (fb, torch.zeros_like(fb, dtype=int))][mask]
+        classifications = self.testing_states[classifications]
         if not verbosity:
             return classifications
         else:
-            return classifications, {b"break_flag": breaks.any(-1), b"log_like_ratio": sort_lrs[..., -1], b"sort_inds": sort_inds}
+            return classifications, {
+                b"break_flag": breaks.any(-1),
+                b"log_like_ratio": sort_lrs[..., -1],
+                b"sort_inds": sort_inds,
+                b"first_breaks": first_breaks,
+            }
 
 
 class IIDBinaryIntClassifier(Classifier):
@@ -107,7 +120,7 @@ class IIDBinaryIntClassifier(Classifier):
     ..seealso:: :py:class:`IIDInterrupredClassifier`
     """
 
-    def __init__(self, bright_model, dark_model, bright_ratio, dark_ratio):
+    def __init__(self, bright_model, dark_model, bright_ratio, dark_ratio, bright_state=None, dark_state=None):
         self.bright_model = bright_model
         self.dark_model = dark_model
         self.bright_ratio = bright_ratio
@@ -122,6 +135,10 @@ class IIDBinaryIntClassifier(Classifier):
         it, the classifier concludes there is enough evidence to terminate and
         classify as dark
         """
+        if (bright_state is not None) and (dark_state is not None):
+            self.testing_states = torch.tensor([dark_state, bright_state])
+        else:
+            self.testing_states = None
 
     def classify(self, data, verbosity=0):
         r"""
@@ -173,7 +190,19 @@ class IIDBinaryIntClassifier(Classifier):
             (one_break & bright_break_flag) | \
             (both_break & (bright_first & bright_break_flag)) | \
             (neither_break & bright_most_likely)
-        if not verbosity:
-            return classified_bright.int()
+
+        classified_bright = classified_bright.long()
+        if self.testing_states is not None:
+            classifications = self.testing_states[classified_bright]
         else:
-            return classified_bright.int(), {b"break_flag": break_flag, b"log_like_ratio": intermediate_lr[..., -1]}
+            classifications = classified_bright
+
+        if not verbosity:
+            return classifications
+        else:
+            return classifications, {
+                b"break_flag": break_flag,
+                b"log_like_ratio": intermediate_lr[..., -1],
+                b"first_break_bright": first_break_bright,
+                b"first_break_dark": first_break_dark,
+            }

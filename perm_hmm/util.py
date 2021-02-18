@@ -139,7 +139,8 @@ def id_and_transpositions(n):
 
 def first_nonzero(x, dim=-1):
     """
-    The first nonzero elements along a dimension. If none, default to -1.
+    The first nonzero elements along a dimension.
+    If none, default to length along dim.
     :param torch.Tensor x:
     :param int dim:
     :return: x reduced along dim.
@@ -153,7 +154,7 @@ def first_nonzero(x, dim=-1):
     rl = torch.arange(l, 0, -1).view((l,)+(1,)*len(x.shape[dim:-1]))
     to_argmax = ix * rl
     to_ret = to_argmax.argmax(dim)
-    return to_ret*bx.any(dim) - (~bx.any(dim)).int()
+    return to_ret*bx.any(dim) + (~bx.any(dim)).int()*bx.shape[dim]
 
 
 def indices(shape):

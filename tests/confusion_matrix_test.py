@@ -41,7 +41,7 @@ class MyTestCase(unittest.TestCase):
         avg_rate = rate_dict[b"rate"]
         avg_int = torch.tensor([rate_dict[b"lower"], rate_dict[b"upper"]])
         conf_dict = self.empirical_postprocessor.confusion_matrix(.95)
-        all_rates = conf_dict[b'rate']
+        all_rates = conf_dict[b'matrix']
         all_ints = torch.stack([conf_dict[b'lower'], conf_dict[b'upper']])
         self.assertTrue(torch.all(all_rates[~torch.isnan(all_rates)] <= 1))
         for i in range(len(self.testing_states)):
