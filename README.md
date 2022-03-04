@@ -197,3 +197,5 @@ Akira Kyle, and Stephen Erickson for helpful suggestions and comments.
 ## Contact
 
 Shawn Geller: shawn.geller@colorado.edu
+Scott Glancy: scott.glancy@nist.gov
+Emanuel Knill: emanuel.knill@nist.gov
