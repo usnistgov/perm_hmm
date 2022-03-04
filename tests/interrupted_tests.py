@@ -6,7 +6,7 @@ from perm_hmm.models.hmms import DiscreteHMM, PermutedDiscreteHMM
 from perm_hmm.postprocessing import ExactPostprocessor, EmpiricalPostprocessor
 import perm_hmm.training.interrupted_training
 from perm_hmm.util import transpositions, num_to_data, ZERO
-from perm_hmm.strategies.min_ent import MinEntropySelector
+from perm_hmm.policies.min_tree import MinEntPolicy
 
 
 class MyTestCase(unittest.TestCase):
@@ -39,8 +39,7 @@ class MyTestCase(unittest.TestCase):
             self.observation_dist,
         )
         self.bhmm = PermutedDiscreteHMM.from_hmm(self.hmm)
-        self.perm_selector = MinEntropySelector(self.possible_perms, self.bhmm,
-                                                save_history=True)
+        self.perm_policy = MinEntPolicy(self.possible_perms, self.bhmm, save_history=True)
         self.ic = IIDInterruptedClassifier(dist.Bernoulli(self.observation_probs[self.testing_states]), torch.tensor(1.), testing_states=self.testing_states)
 
     def test_ic(self):
@@ -93,26 +92,25 @@ class MyTestCase(unittest.TestCase):
                 initial_logits[testing_states] = il
                 initial_logits[not_states] = ZERO
                 initial_logits = initial_logits.log()
-                possible_perms = \
-                    torch.stack(
-                        [torch.arange(num_states)] +
-                        transpositions(num_states)
-                    )
                 hmm = DiscreteHMM(
                     initial_logits,
                     transition_logits,
                     observation_dist,
                 )
-                ic = IIDInterruptedClassifier(dist.Bernoulli(observation_probs[[testing_states[:2]]]), torch.tensor(19.), testing_states=testing_states[:2])
-                bin_ic = IIDBinaryIntClassifier(dist.Bernoulli(observation_probs[testing_states[1]]),dist.Bernoulli(observation_probs[testing_states[0]]), torch.tensor(19.), torch.tensor(19.), testing_states[1], testing_states[0])
+                ratio = torch.randint(20, ()).float()
+                ic = IIDInterruptedClassifier(dist.Bernoulli(observation_probs[[testing_states[:2]]]), ratio, testing_states=testing_states[:2])
+                bin_ic = IIDBinaryIntClassifier(dist.Bernoulli(observation_probs[testing_states[1]]), dist.Bernoulli(observation_probs[testing_states[0]]), ratio, ratio, testing_states[1], testing_states[0])
                 time_dim = 8
                 all_possible_runs = torch.stack([num_to_data(x, time_dim) for x in range(2**time_dim)])
 
-                bin_class = bin_ic.classify(all_possible_runs).long()
+                bin_class = bin_ic.classify(all_possible_runs)
                 classifi = ic.classify(all_possible_runs)
-                if not ((bin_class == classifi).all()):
-                    bin_class = bin_ic.classify(all_possible_runs)
-                    classifi = ic.classify(all_possible_runs)
+                # if not ((bin_class == classifi).all()):
+                #     bin_class = bin_ic.classify(all_possible_runs)
+                #     classifi = ic.classify(all_possible_runs)
+                self.assertTrue((bin_class == classifi).all())
+
+
 
 
 

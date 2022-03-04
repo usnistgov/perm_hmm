@@ -5,7 +5,7 @@ strategy which involves applying permutations between observations yields an
 appreciable advantage.
 """
 
-import perm_hmm.strategies
-import perm_hmm.strategies.min_ent
+import perm_hmm.policies
+import perm_hmm.policies.min_tree
 import perm_hmm.util
 import perm_hmm.models.hmms

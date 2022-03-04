@@ -49,7 +49,7 @@ class MyTestCase(unittest.TestCase):
                 total_i = (self.ground_truth == self.testing_states[i]).sum().float()
                 total_ij = (self.classifications[self.ground_truth == self.testing_states[i]] == self.testing_states[j]).sum()
                 frequency = total_ij/total_i
-                self.assertTrue((frequency).isclose(all_rates[self.testing_states[i], self.testing_states[j]]))
+                self.assertTrue(frequency.isclose(all_rates[self.testing_states[i], self.testing_states[j]]))
         mask = torch.zeros_like(self.ground_truth, dtype=bool)
         for state in self.testing_states:
             mask = mask | (state == self.ground_truth)
@@ -77,8 +77,7 @@ class MyTestCase(unittest.TestCase):
         valid_prior = log_prior[self.testing_states].unsqueeze(-1)
         test_log_rate = (valid_matrix + valid_prior)[~torch.eye(len(self.testing_states), dtype=bool)].logsumexp(-1)
         test_rate = test_log_rate.exp()
-        self.assertTrue(test_rate.isclose(average_rate, atol=1e-7))
-
+        self.assertTrue(test_rate.isclose(average_rate, atol=1e-4))
 
 
 if __name__ == '__main__':

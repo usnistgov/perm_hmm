@@ -1,17 +1,17 @@
+"""This module includes a few utility functions.
 """
-This module includes a few utility functions.
-"""
+from functools import reduce
+from operator import mul
 
 import torch
 import numpy as np
-
+from scipy.special import logsumexp, expm1, log1p
 
 ZERO = 10**(-14)
 
 
 def bin_ent(logits_tensor):
-    """
-    Computes the binary entropy of a tensor of independent log probabilities.
+    """Computes the binary entropy of a tensor of independent log probabilities.
 
     :param torch.Tensor logits_tensor:
         A tensor of log independent Bernoulli parameters.
@@ -27,8 +27,7 @@ def bin_ent(logits_tensor):
 
 
 def entropy(log_dist):
-    """
-    Computes the entropy of a distribution.
+    """Computes the entropy of a distribution.
 
     :param torch.Tensor log_dist: log of a distribution.
         The last axis should logsumexp to 0.
@@ -40,33 +39,53 @@ def entropy(log_dist):
     return (log_dist.exp() * (-log_dist)).sum(-1)
 
 
-def num_to_data(num, num_bins, base=2):
-    """
-    Turns an integer into a tensor containing its binary representation.
+def num_to_data(num, num_steps, base=2, dtype=float):
+    """Turns an integer into a tensor containing its representation in a given base.
 
-    Use this function to enumerate all possible binary outcomes.
+    Use this function to, for example, enumerate all possible binary outcomes.
 
     :param int num: The integer whose binary representation is output
-
-    :param int num_bins: The size of the output tensor
-
-    :returns: A :py:class:`torch.Tensor` of length ``num_bins``
+    :param base: The base of the resulting strings.
+    :param int num_steps: The size of the output tensor
+    :param dtype: The data type of the output tensor.
+    :returns: A :py:class:`torch.Tensor` of length ``num_steps``
     """
-    x = np.base_repr(num, base)
-    return torch.tensor(
-        list(map(int, '0'*(num_bins - len(x)) + x)), dtype=torch.float
-    )
+    rep_list = []
+    while num > 0:
+        rep_list.append(num % base)
+        num //= base
+    assert len(rep_list) <= num_steps
+    while len(rep_list) < num_steps:
+        rep_list.append(0)
+    rep_list = rep_list[::-1]
+    return torch.tensor(rep_list, dtype=dtype)
+
+
+def all_strings(steps, base=2, dtype=float):
+    r"""All strings of a given base.
+
+    :param steps: Length of strings
+    :param base: The base of the strings.
+    :param dtype: The type of the resulting tensor.
+    :return: All strings of given base, as a :py:class:`~torch.Tensor`.
+    """
+    return torch.stack([num_to_data(num, steps, base, dtype=dtype) for num in range(base**steps)])
 
 
 def unsqueeze_to(x, total, target):
-    """
-    Unsqueezes a dimension-1 tensor to the :attr:`target` position,
+    """Unsqueezes a dimension-1 tensor to the :attr:`target` position,
     out of a total of :attr:`total` dimensions.
 
-    :param torch.Tensor x: A dimension-1 tensor.
-    :param int total: The total desired number of dimensions.
-    :param int target: The target dimension.
-    :returns: A view of :attr:`x` with enough dimensions unsqueezed.
+    Example::
+
+        >>> x = torch.arange(5)
+        >>> y = unsqueeze_to(x, 6, 2)
+        >>> assert y.shape == (1, 1, 5, 1, 1, 1)
+
+    :param torch.Tensor x:
+    :param int total:
+    :param int target:
+    :returns:
     """
     ones = total - target - 1
     twos = target
@@ -118,8 +137,9 @@ def wrap_index(index: torch.Tensor, batch_shape=None):
 
 
 def transpositions(n):
-    """
-    Gives all transpositions for length n as a list of :class:`torch.Tensor`.
+    """Gives all transpositions for length n as a list of
+    :py:class:`~torch.Tensor`.
+
     :param int n: The number to compute for.
     :return: list of transpositions.
     """
@@ -134,13 +154,22 @@ def transpositions(n):
 
 
 def id_and_transpositions(n):
+    r"""Identity and transpositions.
+
+    Computes a list of all transposition permutations, and an identity
+    permutation.
+
+    :param n: Number of states.
+    :return: Shape ``(n*(n-1)/2, n)``
+    """
     return torch.stack([torch.arange(n)] + transpositions(n))
 
 
 def first_nonzero(x, dim=-1):
-    """
-    The first nonzero elements along a dimension.
+    """The first nonzero elements along a dimension.
+
     If none, default to length along dim.
+
     :param torch.Tensor x:
     :param int dim:
     :return: x reduced along dim.
@@ -158,21 +187,23 @@ def first_nonzero(x, dim=-1):
 
 
 def indices(shape):
-    """
-    An implementation of `numpy.indices <https://numpy.org/doc/stable/reference/generated/numpy.indices.html>`_
-    for torch. Always returns the "sparse" version.
+    """An implementation of `numpy.indices <https://numpy.org/doc/stable/reference/generated/numpy.indices.html>`_
+    for torch.
+
+    Always returns the "sparse" version.
+
     :param tuple shape:
     :return: A tuple of tensors, each of dimension (1,)*n + (shape[n],) + (1,)*(len(shape) - n - 1), where n is the position in
-    the tuple.
+        the tuple.
     """
     l = len(shape)
     return tuple(torch.arange(shape[a]).reshape((1,)*a + (shape[a],) + (1,)*(l-a-1)) for a in range(l))
 
 
 def index_to_tuple(index, axis):
-    """
-    Given a tensor x which contains the indices into another tensor y, constructs the
+    """Given a tensor x which contains the indices into another tensor y, constructs the
     tuple to pass as y[index_to_tuple(x, axis)], where axis is the axis which x indexes.
+
     :param torch.Tensor index: An integer tensor whose elements can be interpreted as indices into another tensor.
     :param int axis: The axis which ``index`` indexes into.
     :return: A tuple of tensors which can be broadcast to shape ``index.shape``
@@ -180,3 +211,80 @@ def index_to_tuple(index, axis):
     shape = index.shape
     x = indices(shape)
     return x[:axis] + (index,) + x[axis:]
+
+
+def log_tvd(lps1, lps2):
+    r"""Log of `total variation distance`_, between two arrays with last axis
+    containing the probabilities for all possible outcomes.
+
+    .. math::
+
+        \log(1/2 \sum_{x \in \mathcal{X}}|\mathbb{P}_1(x) - \mathbb{P}_2(x)|)
+
+    where :math:`\mathcal{X}` is the space of possible outcomes.
+
+    .. _`total variation distance`: https://en.wikipedia.org/wiki/Total_variation_distance_of_probability_measures
+
+    :param lps1:
+    :param lps2:
+    :return:
+    """
+    signs = np.sign(lps1 - lps2)
+    retval = logsumexp(
+        logsumexp(np.stack([lps1, lps2], axis=0), axis=0, b=np.stack([signs, -signs], axis=0)),
+        axis=-1
+    ) - np.log(2)
+    return retval
+
+
+def log1mexp(lp):
+    r"""Log 1 minus exp of argument.
+
+    .. math::
+
+        \log(1-\exp(x))
+
+    This is used to take :math:`1-p` for an argument in log space.
+
+    :param lp:
+    :return:
+    """
+    if lp > np.log(.5):
+        return log1p(-np.exp(lp))
+    return np.log(-expm1(lp))
+
+
+def flatten_batch_dims(data, event_dims=0):
+    """Flattens batch dimensions of data, and returns the batch shape.
+
+    Data is assumed to be of shape batch_shape + event_shape. Pass
+    len(event_shape) for the argument event_dims to delineate the event
+    dimensions from the batch dimensions.
+
+    :param data: The data to flatten.
+    :param event_dims: The number of event dimensions. Defaults to 0.
+    :return: The data with the batch dimensions flattened.
+    :raises: Warning if the data shape does not match the previously
+        recorded shape.
+    """
+    data_shape = data.shape
+    shape = data_shape[:len(data_shape) - event_dims]
+    batch_len = reduce(mul, shape, 1)
+    event_shape = data_shape[len(data_shape) - event_dims:]
+    data = data.reshape((batch_len,) + event_shape)
+    return data, shape
+
+
+def perm_idxs_from_perms(possible_perms, perms):
+    idxs = (perms.unsqueeze(-2) == possible_perms).all(-1)  # type: torch.Tensor
+    if (idxs.sum(-1) != 1).any():
+        raise ValueError("Invalid permutations. Either the possible perms"
+                         "contains duplicates, or there was a perm passed "
+                         "that was not a possible perm.")
+    return idxs.max(-1)[1]
+
+
+def kl_divergence(lp1, lp2, axis=-1):
+    mh1 = np.exp(logsumexp(np.log(-lp1) + lp1, axis=axis))
+    mch = np.exp(logsumexp(np.log(-lp2) + lp1, axis=axis))
+    return mch - mh1

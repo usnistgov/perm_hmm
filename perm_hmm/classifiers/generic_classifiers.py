@@ -4,8 +4,8 @@ class Classifier(object):
     """
 
     def classify(self, data, verbosity=0):
-        """
-        Performs classification
+        """Performs classification
+
         :param torch.Tensor data: Data to classify. Arbitrary shape.
         :param verbosity: Flag to return ancillary data generated in the computation.
         :return: If verbosity = 0, return just the classifications.
@@ -15,20 +15,26 @@ class Classifier(object):
         """
         raise NotImplementedError
 
+
 class MAPClassifier(Classifier):
-    """
-    The `maximum a posteriori`_ classifier. Requires a model which implements
+    """The `maximum a posteriori`_ classifier. Requires a model that implements
     posterior_log_initial_state_dist
 
-    .. _https://en.wikipedia.org/wiki/Maximum_a_posteriori_estimation
+    .. _`maximum a posteriori`: https://en.wikipedia.org/wiki/Maximum_a_posteriori_estimation
+
+    Instances of this class have the following attributes:
+
+    ``model``:
+        A model that implements the method ``posterior_log_initial_state_dist``.
     """
 
     def __init__(self, model):
+        super().__init__()
         self.model = model
 
     def classify(self, data, verbosity=0):
-        """
-        Classifies according to the maximum a posteriori classification.
+        """Classifies according to the maximum a posteriori classification.
+
         :param torch.Tensor data: Last dimension should be time.
         :param verbosity: Flag for whether to return the
             posterior log initial state distributions, used in the computation.

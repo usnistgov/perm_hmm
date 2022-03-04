@@ -1,3 +1,10 @@
+r"""Trains the interrupted classifier.
+
+The :py:class:`~perm_hmm.classifiers.interrupted.InterruptedClassifier` has a
+parameter that dictates when the likelihood has risen to the point that we can
+conclude the inference early. This parameter needs to be learned, which is what
+this module provides methods for.
+"""
 import numpy as np
 import torch
 from perm_hmm.classifiers.interrupted import IIDBinaryIntClassifier, IIDInterruptedClassifier
@@ -11,6 +18,7 @@ def exact_train_ic(ic: IIDInterruptedClassifier, all_data, log_joint, num_ratios
 
     The interrupted classifier takes as input a single parameter, the threshold likelihood ratio
     at which to terminate the run and conclude a classification.
+
     :param bayes_perm_hmm.interrupted.InterruptedClassifier ic: To be trained.
     :param torch.Tensor all_data: all possible runs of data.
     :param torch.Tensor log_joint: Corresponding joint log probability of the data.
@@ -39,10 +47,11 @@ def exact_train_ic(ic: IIDInterruptedClassifier, all_data, log_joint, num_ratios
 
 
 def train_ic(ic: IIDInterruptedClassifier, training_data, ground_truth, num_ratios=20):
-    """
+    """Trains the interrupted classifier.
+
     :param bayes_perm_hmm.interrupted.InterruptedClassifier ic: the InterruptedClassifier to train.
     :param training_data: data to train on
-    :param ground_truth: The true initial states which generated the data.
+    :param ground_truth: The true initial states that generated the data.
     :param num_ratios: The number of points to perform the brute force search on.
     :return: The minimum average misclassification rate
     """
@@ -70,6 +79,8 @@ def train_binary_ic(bin_ic: IIDBinaryIntClassifier, training_data, ground_truth,
     Trains the classifier. This is to find the optimal likelihood ratio
     thresholds to minimize classification error.
 
+    :param bin_ic: An IIDBinaryIntClassifier, that has two parameters describing
+        the threshold.
     :param torch.Tensor training_data: float tensor.
         Data to train the classifier on.
 
@@ -113,24 +124,21 @@ def train_binary_ic(bin_ic: IIDBinaryIntClassifier, training_data, ground_truth,
     bin_ic.bright_ratio = ratios[ind[0]]
     bin_ic.dark_ratio = ratios[ind[1]]
 
+
 def exact_train_binary_ic(bin_ic: IIDBinaryIntClassifier, all_data, log_joint, num_ratios=20):
     """
     Trains the classifier. This is to find the optimal likelihood ratio
     thresholds to minimize classification error.
 
+    :param bin_ic: IIDBinaryIntClassifier. It has two parameters that this
+        function trains, which are the two thresholds for terminating the run.
     :param torch.Tensor all_data: All possible runs of data.
 
-        shape ``(num_runs, time_steps)``
+        shape ``(num_runs, steps)``
 
     :param torch.Tensor log_joint: Corresponding log joint likelihoods.
 
         shape ``(num_states, num_runs)``
-
-    :param dark_state: int, Indicates which state is the dark state. Needed to
-        interpret ground_truth.
-
-    :param bright_state: int, Indicates which state is the bright state. Needed to
-        interpret ground_truth.
 
     :param int num_ratios: sets the grid size to perform the brute force
         search for the minimal misclassification rate on.

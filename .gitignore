@@ -44,3 +44,8 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+/example_scripts/three_state_plots.svg
+/example_scripts/three_state_six_steps.pt
+/example_scripts/three_state_two_steps.pt
+/example_scripts/tmats.npz
+/example_scripts/binned_histograms.svg

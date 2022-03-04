@@ -2,14 +2,14 @@ import unittest
 import torch
 import torch.distributions
 import pyro.distributions as dist
-import perm_hmm.models.hmms
-from perm_hmm.strategies.min_ent import MinEntropySelector
+from perm_hmm.policies.min_tree import MinEntPolicy
 from perm_hmm.models.hmms import DiscreteHMM, PermutedDiscreteHMM
 from perm_hmm.classifiers.interrupted import IIDInterruptedClassifier
 from perm_hmm.training.interrupted_training import train_ic, exact_train_ic
 from perm_hmm.postprocessing import ExactPostprocessor, EmpiricalPostprocessor
 from perm_hmm.util import transpositions, num_to_data, ZERO
 from perm_hmm.classifiers.generic_classifiers import MAPClassifier
+
 
 class MyTestCase(unittest.TestCase):
     def setUp(self) -> None:
@@ -36,13 +36,12 @@ class MyTestCase(unittest.TestCase):
         self.bdhmm = PermutedDiscreteHMM(self.initial_logits,
                                          self.transition_logits,
                                          self.observation_dist)
-        self.perm_selector = MinEntropySelector(self.possible_perms, self.bdhmm,
-                                                save_history=True)
+        self.perm_policy = MinEntPolicy(self.possible_perms, self.bdhmm, save_history=True)
         self.shmm = DiscreteHMM(self.initial_logits,
                                 self.transition_logits,
                                 self.observation_dist)
 
-    def test_something(self):
+    def test_postprocessing(self):
         max_t = 10
         num_samples = 1000
         x, y = self.shmm.sample((num_samples, max_t))
@@ -55,9 +54,9 @@ class MyTestCase(unittest.TestCase):
         self.assertTrue(torch.allclose(mr[b"matrix"][self.testing_states].sum(-1), torch.tensor(1.)))
         self.assertTrue((mr[b"lower"][self.testing_states] <= mr[b"matrix"][self.testing_states]).all())
         self.assertTrue((mr[b"upper"][self.testing_states] >= mr[b"matrix"][self.testing_states]).all())
-        v = self.perm_selector.get_perms(y, -1)
-        hist = self.perm_selector.calc_history
-        b_log_post_dist = hist[b"dist_array"][..., -1, :]
+        v = self.perm_policy.get_perms(y)
+        hist = self.perm_policy.calc_history
+        b_log_post_dist = hist[b"belief"][..., -1, :].logsumexp(-1)
         b_classifications = b_log_post_dist.argmax(-1)
         bep = EmpiricalPostprocessor(ground_truth, b_classifications)
         mr = bep.confusion_matrix()
@@ -103,9 +102,9 @@ class MyTestCase(unittest.TestCase):
         conf = np.log_confusion_matrix()
         print(mr)
         self.assertTrue(conf[self.testing_states].logsumexp(-1).allclose(torch.tensor(0.), atol=1e-6))
-        self.perm_selector.reset(save_history=True)
-        bayes_results = self.perm_selector.get_perms(all_data, -1)
-        hist = self.perm_selector.calc_history
+        self.perm_policy.reset(save_history=True)
+        bayes_results = self.perm_policy.get_perms(all_data)
+        hist = self.perm_policy.calc_history
         phmm = self.bdhmm.expand_with_perm(bayes_results)
         b_map_class = MAPClassifier(phmm)
         lp = phmm.log_prob(all_data)

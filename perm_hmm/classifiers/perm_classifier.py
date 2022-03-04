@@ -7,8 +7,10 @@ class PermClassifier(MAPClassifier):
     """
 
     def classify(self, data, perms=None, verbosity=0):
-        """
-        Classifies data.
+        """Classifies data.
+
+        Calls MAPClassifier(self.model.expand_with_perm(perms)).classify(data, verbosity)
+
         :param torch.Tensor data: To be classified. Last dimension interpreted as time.
         :param perms: Permutations. Should have shape == data.shape + (num_states,)
         :param verbosity: If nonzero, returns a tuple with second element a dict
