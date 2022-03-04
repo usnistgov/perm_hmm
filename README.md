@@ -175,13 +175,7 @@ See also the list of [contributors](https://github.com/usnistgov/perm_hmm/contri
 
 ## Copyright
 
-To see the latest statement, please visit:
-https://www.nist.gov/director/copyright-fair-use-and-licensing-statements-srd-data-and-software
-
-Add a directory where you put licenses of any dependent software or if
-the project you are working on is a fork.
-
-Also see the [LICENSE.md](https://github.com/your/project/LICENSE.md)
+See the [LICENSE.md](https://github.com/usnistgov/perm_hmm/LICENSE.md)
 
 ## Acknowledgments
 
