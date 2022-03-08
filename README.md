@@ -175,7 +175,7 @@ See also the list of [contributors](https://github.com/usnistgov/perm_hmm/contri
 
 ## Copyright
 
-See the [LICENSE.md](https://github.com/usnistgov/perm_hmm/LICENSE.md)
+See the [LICENSE.md](https://github.com/usnistgov/perm_hmm/blob/master/LICENSE.md)
 
 ## Acknowledgments
 
