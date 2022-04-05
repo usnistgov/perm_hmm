@@ -7,7 +7,7 @@ This package provides functionality for inference of the initial state of a
 Hidden Markov Model (HMM), when we have access to permutations of the underlying states.
 We provide both analytical calculations to compute the probability of correct inference,
 and functionality for Monte Carlo computations. Further details are provided in
-arxiv:xxxx.xxxxxx
+arXiv:2204.00710
 
 ## Project Status
 
