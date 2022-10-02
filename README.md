@@ -1,4 +1,4 @@
-# State inference via permutations in Hidden Markov Models
+# State inference using Partially Observable Markov Decision Processes
 
 
 ## Abstract
